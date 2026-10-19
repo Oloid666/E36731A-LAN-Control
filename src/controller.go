@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
+	"io"
 	"math"
 	"net"
 	"strconv"
@@ -14,12 +15,15 @@ import (
 )
 
 type Config struct {
-	Role       string  `json:"role"`
-	Mode       string  `json:"mode"`
-	Voltage    float64 `json:"voltage"`
-	Current    float64 `json:"current"`
-	OVP        float64 `json:"ovp"`
-	Resistance float64 `json:"resistance"`
+	Role        string  `json:"role"`
+	Mode        string  `json:"mode"`
+	Voltage     float64 `json:"voltage"`
+	Current     float64 `json:"current"`
+	OVP         float64 `json:"ovp"`
+	Resistance  float64 `json:"resistance"`
+	ESRMilliohm float64 `json:"esr_milliohm"`
+	MinVoltage  float64 `json:"min_voltage"`
+	MaxVoltage  float64 `json:"max_voltage"`
 }
 type Reading struct {
 	Time         string   `json:"time"`
@@ -27,46 +31,71 @@ type Reading struct {
 	Current      float64  `json:"current"`
 	Power        float64  `json:"power"`
 	Resistance   *float64 `json:"resistance"`
+	ESRTarget    *float64 `json:"esr_target_voltage"`
+	ESRCommand   *float64 `json:"esr_command_voltage"`
+	SampleMS     float64  `json:"sample_ms"`
 	Output       bool     `json:"output"`
 	Actual       string   `json:"actual"`
 	Emulation    string   `json:"emulation"`
 	Questionable int      `json:"questionable"`
 }
 type State struct {
-	Connected bool      `json:"connected"`
-	Identity  string    `json:"identity"`
-	IP        string    `json:"ip"`
-	Config    *Config   `json:"config"`
-	Reading   *Reading  `json:"reading"`
-	History   []Reading `json:"history"`
-	Logs      []string  `json:"logs"`
-	Message   string    `json:"message"`
-	Error     string    `json:"error"`
-	Unknown   bool      `json:"unknown"`
+	DebugOnly    bool              `json:"debug_only"`
+	Preferences  Preferences       `json:"preferences"`
+	Connected    bool              `json:"connected"`
+	Identity     string            `json:"identity"`
+	IP           string            `json:"ip"`
+	Config       *Config           `json:"config"`
+	Reading      *Reading          `json:"reading"`
+	History      []Reading         `json:"history"`
+	Logs         []string          `json:"logs"`
+	Message      string            `json:"message"`
+	Error        string            `json:"error"`
+	Unknown      bool              `json:"unknown"`
+	Warning      string            `json:"warning"`
+	LastCommand  string            `json:"last_command"`
+	LastResponse string            `json:"last_response"`
+	LastQueryMS  float64           `json:"last_query_ms"`
+	LastFailure  string            `json:"last_failure"`
+	Version      string            `json:"version"`
+	Options      ConnectionOptions `json:"options"`
+	Diagnostics  []DiagnosticItem  `json:"diagnostics"`
 }
 type Controller struct {
-	mu         sync.Mutex
-	conn       net.Conn
-	reader     *bufio.Reader
-	dial       func(string, string, time.Duration) (net.Conn, error)
-	state      State
-	generation atomic.Int64
-	ticket     int64
-	deadline   time.Time
-	heartbeat  atomic.Int64
-	busy       atomic.Bool
+	preferencesPath string
+	mu              sync.Mutex
+	conn            net.Conn
+	reader          *bufio.Reader
+	dial            func(string, string, time.Duration) (net.Conn, error)
+	state           State
+	generation      atomic.Int64
+	ticket          int64
+	deadline        time.Time
+	heartbeat       atomic.Int64
+	busy            atomic.Bool
+	dirty           bool
+	logWriter       io.Writer
+	esrCommand      float64
+	nextPoll        time.Time
 }
 
 func NewController() *Controller {
 	c := &Controller{dial: net.DialTimeout}
 	c.state.Message = "未連線；實機驗證尚未完成"
+	c.state.Version = "v0.3.0"
+	c.state.Options = DefaultOptions()
+	c.state.Preferences = DefaultPreferences()
 	c.heartbeat.Store(time.Now().UnixNano())
 	return c
 }
 func (c *Controller) log(s string) {
-	c.state.Logs = append(c.state.Logs, time.Now().Format("15:04:05 ")+s)
-	if len(c.state.Logs) > 120 {
-		c.state.Logs = c.state.Logs[len(c.state.Logs)-120:]
+	line := time.Now().Format("15:04:05.000 ") + s
+	c.state.Logs = append(c.state.Logs, line)
+	if c.logWriter != nil {
+		fmt.Fprintln(c.logWriter, line)
+	}
+	if len(c.state.Logs) > 2000 {
+		c.state.Logs = c.state.Logs[len(c.state.Logs)-2000:]
 	}
 }
 func validIP(value string) error {
@@ -77,13 +106,13 @@ func validIP(value string) error {
 	return nil
 }
 func (p Config) validate() error {
-	if p.Role != "source" && p.Role != "sink" {
-		return errors.New("Role 必須為 source 或 sink")
+	if p.Role != "source" && p.Role != "sink" && p.Role != "battery" {
+		return errors.New("Role 必須為 source、sink 或 battery")
 	}
-	if p.Mode != "CV" && p.Mode != "CC" && !(p.Role == "sink" && p.Mode == "CR") {
-		return errors.New("Source 支援 CC/CV；Sink 支援 CC/CV/CR")
+	if (p.Role == "battery" && p.Mode != "ESR") || (p.Role != "battery" && p.Mode != "CV" && p.Mode != "CC" && !(p.Role == "sink" && p.Mode == "CR")) {
+		return errors.New("Source 支援 CC/CV；Sink 支援 CC/CV/CR；Battery 僅支援 ESR")
 	}
-	for _, v := range []float64{p.Voltage, p.Current, p.OVP, p.Resistance} {
+	for _, v := range []float64{p.Voltage, p.Current, p.OVP, p.Resistance, p.ESRMilliohm, p.MinVoltage, p.MaxVoltage} {
 		if math.IsNaN(v) || math.IsInf(v, 0) {
 			return errors.New("參數必須為有限數值")
 		}
@@ -91,7 +120,7 @@ func (p Config) validate() error {
 	if p.Mode != "CR" && (p.Current <= 0 || p.Current > 20) {
 		return errors.New("本版本電流範圍 >0–20 A")
 	}
-	if p.Role == "source" {
+	if p.Role == "source" || p.Role == "battery" {
 		if p.Voltage < 0 || p.Voltage > 30 || p.OVP <= p.Voltage || p.OVP > 33 {
 			return errors.New("Source：電壓 0–30 V，OVP 高於電壓且不超過 33 V")
 		}
@@ -106,14 +135,28 @@ func (p Config) validate() error {
 	if p.Mode == "CR" && (p.Resistance < 0.08 || p.Resistance > 4000) {
 		return errors.New("Sink CR 阻值範圍為 0.08–4000 Ω")
 	}
-	if (p.Role == "source" || p.Mode == "CV") && p.Voltage*p.Current > 200 {
+	if p.Role == "battery" {
+		if p.Current < 0.01 {
+			return errors.New("PS2Q 電流設定最低 0.01 A")
+		}
+		if p.ESRMilliohm < 0 || p.ESRMilliohm > 1000 {
+			return errors.New("軟體 ESR 範圍 0–1000 mΩ")
+		}
+		if p.MinVoltage < 0 || p.MinVoltage >= p.MaxVoltage || p.MaxVoltage > 30 || p.Voltage < p.MinVoltage || p.Voltage > p.MaxVoltage || p.MaxVoltage >= p.OVP {
+			return errors.New("ESR 必須符合 0≤下限≤Voc≤上限≤30 V，且上限<OVP")
+		}
+		if p.MaxVoltage*p.Current > 200 {
+			return errors.New("ESR 上限電壓×電流超過 200 W")
+		}
+	}
+	if (p.Role == "source" || p.Role == "battery" || p.Mode == "CV") && p.Voltage*p.Current > 200 {
 		return errors.New("本版本設定 V×I 上限為 200 W")
 	}
 	return nil
 }
 func (c *Controller) begin() {
 	c.ticket = c.generation.Load()
-	c.deadline = time.Now().Add(12 * time.Second)
+	c.deadline = time.Now().Add(time.Duration(c.state.Options.TimeoutMS*12) * time.Millisecond)
 }
 func (c *Controller) ready() error {
 	if c.conn == nil {
@@ -125,7 +168,7 @@ func (c *Controller) ready() error {
 	if time.Now().After(c.deadline) {
 		return errors.New("本次操作逾時")
 	}
-	d := time.Now().Add(2 * time.Second)
+	d := time.Now().Add(time.Duration(c.state.Options.TimeoutMS) * time.Millisecond)
 	if c.deadline.Before(d) {
 		d = c.deadline
 	}
@@ -135,14 +178,21 @@ func (c *Controller) write(cmd string) error {
 	if err := c.ready(); err != nil {
 		return err
 	}
+	c.state.LastCommand = cmd
+	c.state.LastResponse = ""
 	c.log("TX " + cmd)
 	_, err := fmt.Fprint(c.conn, cmd+"\n")
+	if err != nil {
+		c.dirty = true
+	}
 	return err
 }
 func (c *Controller) query(cmd string) (string, error) {
+	started := time.Now()
 	if err := c.write(cmd); err != nil {
 		return "", err
 	}
+	c.dirty = true
 	// Bound the line so a wrong TCP service cannot allocate arbitrary memory.
 	var line []byte
 	for len(line) < 4096 {
@@ -152,7 +202,10 @@ func (c *Controller) query(cmd string) (string, error) {
 		}
 		if b == '\n' {
 			s := strings.TrimSpace(string(line))
-			c.log("RX " + s)
+			c.dirty = false
+			c.state.LastResponse = s
+			c.state.LastQueryMS = float64(time.Since(started).Microseconds()) / 1000
+			c.log(fmt.Sprintf("RX [%.1f ms] %s", c.state.LastQueryMS, s))
 			return s, nil
 		}
 		line = append(line, b)
@@ -190,26 +243,33 @@ func (c *Controller) bits(cmd string) (int, error) {
 	}
 	return int(v), nil
 }
-func (c *Controller) errors() error {
+func (c *Controller) readErrors() ([]string, error) {
 	var list []string
 	for i := 0; i < 21; i++ {
-		s, e := c.query("SYST:ERR?")
+		response, e := c.query("SYST:ERR?")
 		if e != nil {
-			return e
+			return list, e
 		}
-		v, e := strconv.Atoi(strings.TrimSpace(strings.SplitN(s, ",", 2)[0]))
+		code, e := strconv.Atoi(strings.TrimSpace(strings.SplitN(response, ",", 2)[0]))
 		if e != nil {
-			return fmt.Errorf("錯誤佇列格式錯誤：%s", s)
+			return list, fmt.Errorf("錯誤佇列格式錯誤：%s", response)
 		}
-		if v == 0 {
-			if len(list) > 0 {
-				return errors.New("SCPI：" + strings.Join(list, " / "))
-			}
-			return nil
+		if code == 0 {
+			return list, nil
 		}
-		list = append(list, s)
+		list = append(list, response)
 	}
-	return errors.New("錯誤佇列未清空：" + strings.Join(list, " / "))
+	return list, errors.New("錯誤佇列未清空：" + strings.Join(list, " / "))
+}
+func (c *Controller) errors() error {
+	list, e := c.readErrors()
+	if e != nil {
+		return e
+	}
+	if len(list) > 0 {
+		return errors.New("SCPI 新錯誤：" + strings.Join(list, " / "))
+	}
+	return nil
 }
 func (c *Controller) opc() error {
 	s, e := c.query("*OPC?")
@@ -232,12 +292,15 @@ func (c *Controller) connect(ip string) error {
 	c.state.Reading = nil
 	c.state.Identity = ""
 	c.state.Error = ""
-	conn, e := c.dial("tcp", net.JoinHostPort(ip, "5025"), 3*time.Second)
+	c.state.Warning = ""
+	c.state.Diagnostics = nil
+	conn, e := c.dial("tcp", net.JoinHostPort(ip, "5025"), time.Duration(c.state.Options.TimeoutMS)*time.Millisecond)
 	if e != nil {
 		return e
 	}
 	c.conn = conn
 	c.reader = bufio.NewReader(conn)
+	c.dirty = false
 	identity, e := c.query("*IDN?")
 	if e != nil {
 		conn.Close()
@@ -250,6 +313,14 @@ func (c *Controller) connect(ip string) error {
 		c.conn = nil
 		return fmt.Errorf("型號不是 E36731A，未傳送控制指令：%s", identity)
 	}
+	baseline, e := c.readErrors()
+	if e != nil {
+		return e
+	}
+	if len(baseline) > 0 {
+		c.state.Warning = "連線時已存在的 SCPI 錯誤（來源未確認，已逐筆記錄）：" + strings.Join(baseline, " / ")
+		c.log("BASELINE " + c.state.Warning)
+	}
 	c.state.Connected = true
 	c.state.IP = ip
 	c.state.Identity = identity
@@ -257,9 +328,16 @@ func (c *Controller) connect(ip string) error {
 	c.state.History = nil
 	c.state.Message = "已連線；未變更設定或開啟輸出"
 	c.heartbeat.Store(time.Now().UnixNano())
+	if c.state.DebugOnly {
+		c.state.Message = "唯讀診斷連線；不輪詢、不設定、不允許 ON"
+		return nil
+	}
 	return c.sample()
 }
 func (c *Controller) apply(p Config) error {
+	if c.state.DebugOnly {
+		return errors.New("唯讀診斷連線禁止設定；請先斷線，再用一般連線")
+	}
 	if e := p.validate(); e != nil {
 		return e
 	}
@@ -277,6 +355,8 @@ func (c *Controller) apply(p Config) error {
 	target := "PSUP"
 	if p.Role == "sink" {
 		target = "LOAD"
+	} else if p.Role == "battery" {
+		target = "PS2Q"
 	}
 	mode, e := c.query("EMUL?")
 	if e != nil {
@@ -293,8 +373,14 @@ func (c *Controller) apply(p Config) error {
 			return e
 		}
 	}
-	commands := []string{"SYST:REM", "INIT:CONT:TRAN OFF", "ABOR:TRAN", "VOLT:MODE FIX", "CURR:MODE FIX", "OUTP:DEL:RISE 0", "OUTP:DEL:FALL 0"}
-	if p.Role == "source" {
+	commands := []string{"SYST:REM"}
+	if p.Role != "battery" {
+		commands = append(commands, "INIT:CONT:TRAN OFF", "ABOR:TRAN", "VOLT:MODE FIX", "CURR:MODE FIX", "OUTP:DEL:RISE 0", "OUTP:DEL:FALL 0")
+	}
+	if p.Role == "battery" {
+		c.esrCommand = p.Voltage
+		commands = append(commands, fmt.Sprintf("VOLT:PROT %.9g", p.OVP), "VOLT:PROT:STAT ON", fmt.Sprintf("CURR %.9g", p.Current), fmt.Sprintf("VOLT %.9g", p.Voltage))
+	} else if p.Role == "source" {
 		preferred := "VOLT"
 		if p.Mode == "CC" {
 			preferred = "CURR"
@@ -351,6 +437,8 @@ func (c *Controller) verify(p Config) error {
 	expected := "PSUP"
 	if p.Role == "sink" {
 		expected = "LOAD"
+	} else if p.Role == "battery" {
+		expected = "PS2Q"
 	}
 	s, e := c.query("EMUL?")
 	if e != nil {
@@ -358,6 +446,9 @@ func (c *Controller) verify(p Config) error {
 	}
 	if s != expected {
 		return errors.New("操作模式讀回不符")
+	}
+	if p.Role == "battery" {
+		return c.verifyESR(p)
 	}
 	if p.Role == "source" {
 		for _, v := range []struct {
@@ -444,6 +535,9 @@ func (c *Controller) verify(p Config) error {
 	return nil
 }
 func (c *Controller) on(expected Config) error {
+	if c.state.DebugOnly {
+		return errors.New("唯讀診斷連線禁止 ON")
+	}
 	if c.state.Config == nil || *c.state.Config != expected {
 		return errors.New("設定尚未驗證或已變更，請先套用")
 	}
@@ -462,6 +556,15 @@ func (c *Controller) on(expected Config) error {
 		}
 		if math.Abs(v) > 30 || expectedCurrent > 20 || math.Abs(v)*expectedCurrent > 200 {
 			return errors.New("輸入電壓或預估功率超過本版本 30 V／200 W 限制")
+		}
+	}
+	if expected.Role == "battery" {
+		v, e := c.number("MEAS:VOLT?")
+		if e != nil {
+			return e
+		}
+		if v > expected.MaxVoltage+.01 || v < -.01 {
+			return errors.New("ESR ON 前外部電壓超出允許範圍")
 		}
 	}
 	if e := c.write("OUTP ON"); e != nil {
@@ -525,29 +628,39 @@ func (c *Controller) disconnect() error {
 	return nil
 }
 func (c *Controller) fail(err error) {
-	// A timed-out socket may contain delayed responses. Never call OFF? on a dirty
-	// stream and mistake an old response for confirmation. Send OFF once and close.
+	failedCommand := c.state.LastCommand
+	c.state.LastFailure = fmt.Sprintf("%s → %v", failedCommand, err)
 	hadConnection := c.conn != nil
+	confirmedOff := false
 	if hadConnection {
-		c.conn.SetWriteDeadline(time.Now().Add(time.Second))
-		fmt.Fprint(c.conn, "OUTP OFF\n")
-		c.log("TX OUTP OFF (錯誤後盡力送出，未確認)")
+		if !c.dirty {
+			c.begin()
+			confirmedOff = c.off() == nil
+		}
+		if !confirmedOff {
+			c.conn.SetWriteDeadline(time.Now().Add(time.Second))
+			fmt.Fprint(c.conn, "OUTP OFF\n")
+			c.log("TX OUTP OFF (錯誤後盡力送出，未確認)")
+		}
 		c.conn.Close()
 		c.conn = nil
 		c.reader = nil
-		c.state.Unknown = true
+		c.state.Unknown = !confirmedOff
 	}
 	c.state.Connected = false
 	c.state.Config = nil
 	c.state.Reading = nil
-	c.state.Error = err.Error()
-	if c.state.Unknown {
+	c.state.Error = c.state.LastFailure
+	if confirmedOff {
+		c.state.Error += "；已確認 OFF 並斷線"
+	} else if c.state.Unknown {
 		c.state.Error += "；OFF 未確認，請用儀器面板關閉輸出"
 	}
 	c.state.Message = c.state.Error
 	c.log("ERROR " + c.state.Error)
 }
 func (c *Controller) sample() error {
+	started := time.Now()
 	var r Reading
 	var e error
 	if r.Voltage, e = c.number("MEAS:VOLT?"); e != nil {
@@ -603,11 +716,19 @@ func (c *Controller) sample() error {
 		target := "PSUP"
 		if c.state.Config.Role == "sink" {
 			target = "LOAD"
+		} else if c.state.Config.Role == "battery" {
+			target = "PS2Q"
 		}
 		if r.Emulation != target {
 			return errors.New("儀器模式被其他控制端變更")
 		}
 	}
+	if r.Output && c.state.Config != nil && c.state.Config.Role == "battery" {
+		if e = c.feedbackESR(&r); e != nil {
+			return e
+		}
+	}
+	r.SampleMS = float64(time.Since(started).Microseconds()) / 1000
 	c.state.Reading = &r
 	c.state.History = append(c.state.History, r)
 	if len(c.state.History) > 120 {
@@ -616,7 +737,7 @@ func (c *Controller) sample() error {
 	return nil
 }
 func (c *Controller) poll() {
-	ticker := time.NewTicker(time.Second)
+	ticker := time.NewTicker(200 * time.Millisecond)
 	defer ticker.Stop()
 	for range ticker.C {
 		c.mu.Lock()
@@ -628,8 +749,9 @@ func (c *Controller) poll() {
 				if e == nil {
 					c.state.Message = "網頁超過 10 秒未回報，已確認 OFF 並斷線"
 				}
-			} else {
+			} else if !c.state.DebugOnly && time.Now().After(c.nextPoll) {
 				e = c.sample()
+				c.nextPoll = time.Now().Add(time.Duration(c.state.Options.PollMS) * time.Millisecond)
 			}
 			if e != nil {
 				c.fail(e)

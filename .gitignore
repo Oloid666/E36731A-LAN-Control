@@ -1,0 +1,4 @@
+*.log
+preferences.json
+*.tmp
+E36731A-debug*.json

@@ -24,9 +24,10 @@ import (
 var assets embed.FS
 
 type Action struct {
-	Action string `json:"action"`
-	IP     string `json:"ip"`
-	Config Config `json:"config"`
+	Action  string            `json:"action"`
+	IP      string            `json:"ip"`
+	Config  Config            `json:"config"`
+	Options ConnectionOptions `json:"options"`
 }
 type Server struct {
 	controller *Controller
@@ -84,6 +85,11 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(204)
 		return
 	}
+	if r.URL.Path == "/api/debug" && r.Method == "GET" {
+		w.Header().Set("Content-Disposition", "attachment; filename=E36731A-debug.json")
+		s.state(w)
+		return
+	}
 	if r.URL.Path == "/api/state" && r.Method == "GET" {
 		s.state(w)
 		return
@@ -108,20 +114,28 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Only one JSON object allowed", 400)
 		return
 	}
-	allowed := map[string]bool{"connect": true, "apply": true, "on": true, "off": true, "disconnect": true, "quit": true}
+	allowed := map[string]bool{"connect": true, "connect_debug": true, "apply": true, "on": true, "off": true, "disconnect": true, "quit": true, "diagnose": true, "save": true}
 	if !allowed[a.Action] {
 		http.Error(w, "Unknown action", 400)
 		return
 	}
 	// Validate user input before touching an already connected instrument.
-	if a.Action == "connect" {
+	if a.Action == "connect" || a.Action == "connect_debug" {
 		if e := validIP(a.IP); e != nil {
 			jsonReply(w, 400, map[string]string{"error": e.Error()})
 			return
 		}
 	}
-	if a.Action == "apply" || a.Action == "on" {
+	if a.Action == "apply" || a.Action == "on" || a.Action == "save" {
 		if e := a.Config.validate(); e != nil {
+			jsonReply(w, 400, map[string]string{"error": e.Error()})
+			return
+		}
+	}
+	if a.Action == "connect" || a.Action == "connect_debug" || a.Action == "save" {
+		var e error
+		a.Options, e = a.Options.normalized()
+		if e != nil {
 			jsonReply(w, 400, map[string]string{"error": e.Error()})
 			return
 		}
@@ -154,10 +168,34 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		e = errors.New("程式正在結束，操作已取消")
 	} else {
 		switch a.Action {
-		case "connect":
+		case "connect", "connect_debug":
+			c.state.DebugOnly = a.Action == "connect_debug"
+			c.state.Options = a.Options
 			e = c.connect(a.IP)
+			if e == nil {
+				p := c.state.Preferences
+				p.IP = a.IP
+				p.Options = a.Options
+				if saveErr := c.savePreferences(p); saveErr != nil {
+					c.log("SETTINGS " + saveErr.Error())
+				}
+			}
 		case "apply":
 			e = c.apply(a.Config)
+			if e == nil {
+				p := c.state.Preferences
+				p.Config = a.Config
+				if saveErr := c.savePreferences(p); saveErr != nil {
+					c.log("SETTINGS " + saveErr.Error())
+				}
+			}
+		case "diagnose":
+			e = c.diagnose()
+		case "save":
+			e = c.savePreferences(Preferences{IP: a.IP, Config: a.Config, Options: a.Options})
+			if e == nil {
+				c.state.Message = "已儲存設定；未套用到儀器，也未開啟輸出"
+			}
 		case "on":
 			e = c.on(a.Config)
 		case "off":
@@ -166,10 +204,13 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			e = c.disconnect()
 		}
 	}
-	if e != nil {
+	if e != nil && a.Action != "save" {
 		c.fail(e)
 	}
 	message := c.state.Message
+	if e != nil && a.Action == "save" {
+		message = e.Error()
+	}
 	c.mu.Unlock()
 	if a.Action == "quit" {
 		select {
@@ -209,10 +250,12 @@ func main() {
 		os.Exit(1)
 	}
 	controller := NewController()
+	closeStorage := setupStorage(controller)
+	defer closeStorage()
 	app := &Server{controller: controller, token: hex.EncodeToString(random), host: listener.Addr().String(), quit: make(chan struct{}, 1)}
 	server := &http.Server{Handler: app, ReadHeaderTimeout: 5 * time.Second, IdleTimeout: 30 * time.Second, MaxHeaderBytes: 8192}
 	url := "http://" + app.host + "/#" + app.token
-	fmt.Println("E36731A LAN Control v0.2.0 — Windows 免安裝版 / Local HTML")
+	fmt.Println("E36731A LAN Control v0.3.0 — Windows 免安裝版 / Local HTML")
 	fmt.Println("請保留這個視窗。若瀏覽器未自動開啟，複製下面完整網址：")
 	fmt.Println(url)
 	fmt.Println("退出請用網頁的『OFF 並結束程式』；強制關閉程序不能保證儀器 OFF。")

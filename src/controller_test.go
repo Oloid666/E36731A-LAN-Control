@@ -13,16 +13,19 @@ import (
 )
 
 type fakeInstrument struct {
-	done        chan struct{}
-	mu          sync.Mutex
-	commands    []string
-	values      map[string]string
-	mode        string
-	identity    string
-	errors      []string
-	badReadback bool
-	timeout     string
-	input       float64
+	done            chan struct{}
+	mu              sync.Mutex
+	commands        []string
+	values          map[string]string
+	mode            string
+	identity        string
+	errors          []string
+	badReadback     bool
+	timeout         string
+	input           float64
+	errorOn         map[string]string
+	rejectPS2Q      bool
+	measuredCurrent *float64
 }
 
 func fake() *fakeInstrument {
@@ -79,6 +82,9 @@ func (f *fakeInstrument) serve(conn net.Conn) {
 				answer = "0"
 				if f.values["OUTP"] == "1" {
 					answer = "0.1"
+					if f.measuredCurrent != nil {
+						answer = fmt.Sprint(*f.measuredCurrent)
+					}
 				}
 			case "MEAS:POW?":
 				answer = "0"
@@ -96,7 +102,11 @@ func (f *fakeInstrument) serve(conn net.Conn) {
 			if len(parts) == 2 {
 				key, value := parts[0], parts[1]
 				if key == "EMUL" {
-					f.mode = value
+					if value == "PS2Q" && f.rejectPS2Q {
+						f.errors = append(f.errors, "+305,\"Requested operation is unsupported in current mode\"")
+					} else {
+						f.mode = value
+					}
 					f.values["OUTP"] = "0"
 				}
 				if key == "OUTP" {
@@ -118,6 +128,9 @@ func (f *fakeInstrument) serve(conn net.Conn) {
 					f.values["RES"] = strings.SplitN(cmd, ";:RES ", 2)[1]
 				}
 			}
+		}
+		if errorText, ok := f.errorOn[cmd]; ok {
+			f.errors = append(f.errors, errorText)
 		}
 		f.mu.Unlock()
 		if query {

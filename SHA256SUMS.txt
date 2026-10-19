@@ -1,2 +1,2 @@
-ff06b5e76b2ec4101887f476ff1909d0a5c6af6680ebc64da5dc710dcd106026  downloads/E36731A-LAN-Windows-x64-v0.2.0.zip
-532c7d792f2df891f1831da79f41e084a9ffec88729a90ff63057f4c2f523f9b  E36731A-LAN-Control.exe
+1a6aed3f67cceea52f83f0a0bcad11ad1199a06b85521b8f8ccce7cd6802303a  downloads/E36731A-LAN-Windows-x64-v0.3.0.zip
+5f58ab353a59998576b2fa7c459faf89cd69b6915dfbf0bee4d6c81ce197e36a  E36731A-LAN-Control.exe
