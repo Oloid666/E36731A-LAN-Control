@@ -1,0 +1,28 @@
+E36731A LAN + HTML 控制介面（Windows 10/11，64 位元）
+
+1. 解壓縮 ZIP。
+2. 雙擊 E36731A-LAN-Control.exe。請保留程式視窗。
+3. 瀏覽器會自動開啟。若未開啟，複製程式視窗內的完整 http://127.0.0.1 網址。
+4. 電腦與儀器接到可互通的 LAN，從儀器面板查看 LAN IPv4 位址。
+5. 在網頁輸入儀器 IP，按連線。儀器 TCP 5025 必須可連線。
+6. 先在輸出 OFF 狀態設定 Source/Sink、CC/CV、電壓與電流，按「套用並讀回驗證」。
+7. 核對設定與接線後才按輸出 ON；停止時按 OFF。結束用「OFF 並結束程式」。
+
+不需要安裝 Python、PyVISA、Keysight VISA 或 Go。不需另開 HTML 檔。
+公司仍須允許執行此未簽章 EXE，並允許連接儀器的 TCP 5025。若被封鎖，交給 IT 審核。
+
+Source：電壓／電流限制，實際 CC/CV 由負載決定；選單只設定 ON/OFF 轉換偏好。
+Sink：支援 CC／CV；CC 不設定電壓，CV 另設定吸收電流限制。
+不含斜率、內阻或電池模型。本版本採 30 V、20 A、200 W 的應用限制。
+Sink 的超限停止是軟體輪詢，不是硬體保護。不要將應用限制當成儀器保護規格。
+
+目前狀態：Windows x64 EXE 已交叉編譯，20 項替身通訊與控制測試及競態檢查通過。
+尚未在 Windows 執行、未完成瀏覽器視覺驗證，也未連接 E36731A 實機；不宣稱已驗證可用。
+請先在不連 DUT 的情況下確認 *IDN?、輸出 OFF、設定讀回，再依設備規格做低功率測試。
+
+通訊錯誤時會盡力傳送 OFF 後斷線，但無法確認結果時必須檢查實機面板。
+網頁超過 10 秒未回報時，程式會嘗試 OFF 並斷線；背景分頁節流可能觸發此功能。
+強制關閉程式、斷網或關機時無法保證 OFF。OFF 不代表物理隔離，也不是硬體緊急停止。
+
+原廠參考：E36731A Programming Guide，E36731-90009，Edition 2，August 2026。
+https://www.keysight.com/us/en/assets/9923-01316/programming-guides/E36731A-Battery-Emulator-Programming-Guide.pdf
