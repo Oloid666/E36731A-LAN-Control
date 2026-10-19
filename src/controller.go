@@ -14,21 +14,23 @@ import (
 )
 
 type Config struct {
-	Role    string  `json:"role"`
-	Mode    string  `json:"mode"`
-	Voltage float64 `json:"voltage"`
-	Current float64 `json:"current"`
-	OVP     float64 `json:"ovp"`
+	Role       string  `json:"role"`
+	Mode       string  `json:"mode"`
+	Voltage    float64 `json:"voltage"`
+	Current    float64 `json:"current"`
+	OVP        float64 `json:"ovp"`
+	Resistance float64 `json:"resistance"`
 }
 type Reading struct {
-	Time         string  `json:"time"`
-	Voltage      float64 `json:"voltage"`
-	Current      float64 `json:"current"`
-	Power        float64 `json:"power"`
-	Output       bool    `json:"output"`
-	Actual       string  `json:"actual"`
-	Emulation    string  `json:"emulation"`
-	Questionable int     `json:"questionable"`
+	Time         string   `json:"time"`
+	Voltage      float64  `json:"voltage"`
+	Current      float64  `json:"current"`
+	Power        float64  `json:"power"`
+	Resistance   *float64 `json:"resistance"`
+	Output       bool     `json:"output"`
+	Actual       string   `json:"actual"`
+	Emulation    string   `json:"emulation"`
+	Questionable int      `json:"questionable"`
 }
 type State struct {
 	Connected bool      `json:"connected"`
@@ -78,15 +80,15 @@ func (p Config) validate() error {
 	if p.Role != "source" && p.Role != "sink" {
 		return errors.New("Role 必須為 source 或 sink")
 	}
-	if p.Mode != "CV" && p.Mode != "CC" {
-		return errors.New("Mode 必須為 CC 或 CV")
+	if p.Mode != "CV" && p.Mode != "CC" && !(p.Role == "sink" && p.Mode == "CR") {
+		return errors.New("Source 支援 CC/CV；Sink 支援 CC/CV/CR")
 	}
-	for _, v := range []float64{p.Voltage, p.Current, p.OVP} {
+	for _, v := range []float64{p.Voltage, p.Current, p.OVP, p.Resistance} {
 		if math.IsNaN(v) || math.IsInf(v, 0) {
 			return errors.New("參數必須為有限數值")
 		}
 	}
-	if p.Current <= 0 || p.Current > 20 {
+	if p.Mode != "CR" && (p.Current <= 0 || p.Current > 20) {
 		return errors.New("本版本電流範圍 >0–20 A")
 	}
 	if p.Role == "source" {
@@ -94,12 +96,15 @@ func (p Config) validate() error {
 			return errors.New("Source：電壓 0–30 V，OVP 高於電壓且不超過 33 V")
 		}
 	} else {
-		if p.Current < 0.01 {
+		if p.Mode != "CR" && p.Current < 0.01 {
 			return errors.New("Sink 高電流檔最小設定為 0.01 A")
 		}
 		if p.Mode == "CV" && (p.Voltage < 0.02 || p.Voltage > 30) {
 			return errors.New("Sink CV：電壓範圍 0.02–30 V")
 		}
+	}
+	if p.Mode == "CR" && (p.Resistance < 0.08 || p.Resistance > 4000) {
+		return errors.New("Sink CR 阻值範圍為 0.08–4000 Ω")
 	}
 	if (p.Role == "source" || p.Mode == "CV") && p.Voltage*p.Current > 200 {
 		return errors.New("本版本設定 V×I 上限為 200 W")
@@ -296,10 +301,19 @@ func (c *Controller) apply(p Config) error {
 		}
 		commands = append(commands, "OUTP:PMOD "+preferred, fmt.Sprintf("VOLT:PROT %.9g", p.OVP), "VOLT:PROT:STAT ON", fmt.Sprintf("CURR %.9g", p.Current), fmt.Sprintf("VOLT %.9g", p.Voltage))
 	} else {
-		// Load RES is input resistance, not battery internal resistance. No RES commands.
+		// RES is electronic-load input resistance, not battery internal resistance.
 		commands = append(commands, "CURR:RANG MAX")
 		if p.Mode == "CV" {
 			commands = append(commands, "VOLT:RANG MAX", "FUNC VOLT", fmt.Sprintf("CURR:LIM %.9g", p.Current), fmt.Sprintf("VOLT %.9g", p.Voltage))
+		} else if p.Mode == "CR" {
+			limit := 4000.0
+			if p.Resistance <= 30 {
+				limit = 30
+			} else if p.Resistance <= 1250 {
+				limit = 1250
+			}
+			// Manual p.105: level and range in one SCPI message prevent range conflicts.
+			commands = append(commands, "FUNC RES", "RES:MODE FIX", fmt.Sprintf("RES:RANG %.9g;:RES %.9g", limit, p.Resistance))
 		} else {
 			commands = append(commands, "FUNC CURR", fmt.Sprintf("CURR %.9g", p.Current))
 		}
@@ -394,6 +408,13 @@ func (c *Controller) verify(p Config) error {
 			if e = c.compare("CURR:LIM?", p.Current); e != nil {
 				return e
 			}
+		} else if p.Mode == "CR" {
+			if f != "RES" {
+				return errors.New("Sink 不在 CR 模式")
+			}
+			if e = c.compare("RES?", p.Resistance); e != nil {
+				return e
+			}
 		} else {
 			if f != "CURR" {
 				return errors.New("Sink 不在 CC 模式")
@@ -435,7 +456,11 @@ func (c *Controller) on(expected Config) error {
 		if e != nil {
 			return e
 		}
-		if math.Abs(v) > 30 || math.Abs(v)*expected.Current > 200 {
+		expectedCurrent := expected.Current
+		if expected.Mode == "CR" {
+			expectedCurrent = math.Abs(v) / expected.Resistance
+		}
+		if math.Abs(v) > 30 || expectedCurrent > 20 || math.Abs(v)*expectedCurrent > 200 {
 			return errors.New("輸入電壓或預估功率超過本版本 30 V／200 W 限制")
 		}
 	}
@@ -531,14 +556,21 @@ func (c *Controller) sample() error {
 	if r.Current, e = c.number("MEAS:CURR?"); e != nil {
 		return e
 	}
-	if r.Power, e = c.number("MEAS:POW?"); e != nil {
-		return e
-	}
+	// Sequential V/I readings: calculated power, not instrument-averaged power.
+	// Firmware in the field timed out on MEAS:POW?; do not issue this query.
+	r.Power = r.Voltage * r.Current
 	if r.Output, e = c.flag("OUTP?"); e != nil {
 		return e
 	}
 	if r.Emulation, e = c.query("EMUL?"); e != nil {
 		return e
+	}
+	if r.Emulation == "LOAD" {
+		resistance, err := c.number("RES?")
+		if err != nil {
+			return err
+		}
+		r.Resistance = &resistance
 	}
 	bits, e := c.bits("STAT:OPER:COND?")
 	if e != nil {
@@ -556,6 +588,9 @@ func (c *Controller) sample() error {
 	}
 	if bits&2 != 0 {
 		r.Actual = "CC"
+	}
+	if bits&4 != 0 {
+		r.Actual = "CR"
 	}
 	if !r.Output {
 		r.Actual = "OFF"

@@ -13,6 +13,7 @@ import (
 )
 
 type fakeInstrument struct {
+	done        chan struct{}
 	mu          sync.Mutex
 	commands    []string
 	values      map[string]string
@@ -25,10 +26,11 @@ type fakeInstrument struct {
 }
 
 func fake() *fakeInstrument {
-	return &fakeInstrument{mode: "PSUP", identity: "Keysight Technologies,E36731A,MY00001,1.0", input: 5,
-		values: map[string]string{"OUTP": "0", "VOLT": "0", "CURR": "0.1", "VOLT:PROT": "4.3", "VOLT:PROT:STAT": "1", "VOLT:PROT:TRIP": "0", "VOLT:MODE": "FIX", "CURR:MODE": "FIX", "OUTP:PMOD": "VOLT", "OUTP:DEL:RISE": "0", "OUTP:DEL:FALL": "0", "FUNC": "CURR", "CURR:LIM": "1"}}
+	return &fakeInstrument{done: make(chan struct{}), mode: "PSUP", identity: "Keysight Technologies,E36731A,MY00001,1.0", input: 5,
+		values: map[string]string{"OUTP": "0", "VOLT": "0", "CURR": "0.1", "VOLT:PROT": "4.3", "VOLT:PROT:STAT": "1", "VOLT:PROT:TRIP": "0", "VOLT:MODE": "FIX", "CURR:MODE": "FIX", "OUTP:PMOD": "VOLT", "OUTP:DEL:RISE": "0", "OUTP:DEL:FALL": "0", "FUNC": "CURR", "CURR:LIM": "1", "RES": "4000", "RES:MODE": "FIX"}}
 }
 func (f *fakeInstrument) serve(conn net.Conn) {
+	defer close(f.done)
 	defer conn.Close()
 	scanner := bufio.NewScanner(conn)
 	for scanner.Scan() {
@@ -61,6 +63,8 @@ func (f *fakeInstrument) serve(conn net.Conn) {
 					answer = "16"
 				} else if f.mode == "LOAD" && f.values["FUNC"] == "CURR" {
 					answer = "2"
+				} else if f.mode == "LOAD" && f.values["FUNC"] == "RES" {
+					answer = "4"
 				}
 			case "STAT:QUES:COND?":
 				answer = "0"
@@ -110,6 +114,9 @@ func (f *fakeInstrument) serve(conn net.Conn) {
 					}
 				}
 				f.values[key] = value
+				if strings.HasPrefix(cmd, "RES:RANG ") && strings.Contains(cmd, ";:RES ") {
+					f.values["RES"] = strings.SplitN(cmd, ";:RES ", 2)[1]
+				}
 			}
 		}
 		f.mu.Unlock()
@@ -358,6 +365,7 @@ func TestTimeoutClearsReadingsAndDoesNotConfirmOff(t *testing.T) {
 		t.Fatal("timeout ignored")
 	}
 	c.fail(e)
+	<-f.done
 	if c.state.Reading != nil || !c.state.Unknown || c.state.Connected {
 		t.Fatal("stale readings or false OFF")
 	}
@@ -427,5 +435,118 @@ func TestStateJSONHasNoSessionSecret(t *testing.T) {
 	}
 	if strings.Contains(w.Body.String(), s.token) {
 		t.Fatal("secret exposed")
+	}
+}
+
+// Regression: this firmware can identify/read V and I but never replies to POW.
+func TestPowerComputedWithoutPowerQuery(t *testing.T) {
+	c, f := setup(t)
+	f.mu.Lock()
+	f.timeout = "MEAS:POW?"
+	f.values["OUTP"] = "1"
+	f.values["VOLT"] = "8"
+	f.mu.Unlock()
+	c.begin()
+	c.deadline = time.Now().Add(100 * time.Millisecond)
+	if e := c.sample(); e != nil {
+		t.Fatal(e)
+	}
+	if c.state.Reading == nil || c.state.Reading.Power != 0.8 {
+		t.Fatalf("incorrect calculated power: %+v", c.state.Reading)
+	}
+	if has(f, "MEAS:POW?") {
+		t.Fatal("power query reintroduced")
+	}
+}
+
+func TestLoadResistanceIsReadWithoutActivatingOutput(t *testing.T) {
+	c, f := setup(t)
+	f.mu.Lock()
+	f.mode = "LOAD"
+	f.values["RES"] = "12.5"
+	f.mu.Unlock()
+	if e := c.sample(); e != nil {
+		t.Fatal(e)
+	}
+	if c.state.Reading.Resistance == nil || *c.state.Reading.Resistance != 12.5 {
+		t.Fatal("RES setpoint missing")
+	}
+	if has(f, "OUTP ON") {
+		t.Fatal("reading resistance enabled output")
+	}
+}
+func TestSinkCRApplyReadbackAndOn(t *testing.T) {
+	c, f := setup(t)
+	p := config("sink", "CR")
+	p.Resistance = 100
+	if e := c.apply(p); e != nil {
+		t.Fatal(e)
+	}
+	if !has(f, "FUNC RES") || !has(f, "RES:MODE FIX") || !has(f, "RES:RANG 1250;:RES 100") {
+		t.Fatal("CR command sequence wrong")
+	}
+	if has(f, "OUTP ON") {
+		t.Fatal("apply enabled output")
+	}
+	if e := c.on(p); e != nil {
+		t.Fatal(e)
+	}
+	if c.state.Reading.Actual != "CR" || *c.state.Reading.Resistance != 100 {
+		t.Fatal("CR readback wrong")
+	}
+}
+func TestSinkCRRangesAndInvalidResistance(t *testing.T) {
+	for _, resistance := range []float64{0, 0.079, 4000.1} {
+		p := config("sink", "CR")
+		p.Resistance = resistance
+		if p.validate() == nil {
+			t.Fatal("invalid R accepted")
+		}
+	}
+	for _, test := range []struct {
+		r   float64
+		cmd string
+	}{{.08, "RES:RANG 30;:RES 0.08"}, {10, "RES:RANG 30;:RES 10"}, {1250, "RES:RANG 1250;:RES 1250"}, {4000, "RES:RANG 4000;:RES 4000"}} {
+		c, f := setup(t)
+		p := config("sink", "CR")
+		p.Resistance = test.r
+		if e := c.apply(p); e != nil {
+			t.Fatal(e)
+		}
+		if !has(f, test.cmd) {
+			t.Fatal(test.cmd)
+		}
+	}
+}
+func TestSinkCRRefusesPredictedOvercurrent(t *testing.T) {
+	c, f := setup(t)
+	p := config("sink", "CR")
+	p.Resistance = .1
+	if e := c.apply(p); e != nil {
+		t.Fatal(e)
+	}
+	if c.on(p) == nil || has(f, "OUTP ON") {
+		t.Fatal("predicted 50 A accepted")
+	}
+}
+func TestSourceCannotUseLoadCR(t *testing.T) {
+	p := config("source", "CR")
+	p.Resistance = 100
+	if p.validate() == nil {
+		t.Fatal("source accepted load CR mode")
+	}
+}
+func TestChangedResistanceBlocksOn(t *testing.T) {
+	c, f := setup(t)
+	p := config("sink", "CR")
+	p.Resistance = 100
+	if e := c.apply(p); e != nil {
+		t.Fatal(e)
+	}
+	f.mu.Lock()
+	f.values["RES"] = "0.1"
+	f.mu.Unlock()
+	if c.on(p) == nil || has(f, "OUTP ON") {
+		t.Fatal("external R change ignored")
 	}
 }

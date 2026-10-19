@@ -1,11 +1,11 @@
-E36731A LAN + HTML 控制介面（Windows 10/11，64 位元）
+E36731A LAN + HTML v0.2.0 控制介面（Windows 10/11，64 位元）
 
 1. 解壓縮 ZIP。
 2. 雙擊 E36731A-LAN-Control.exe。請保留程式視窗。
 3. 瀏覽器會自動開啟。若未開啟，複製程式視窗內的完整 http://127.0.0.1 網址。
 4. 電腦與儀器接到可互通的 LAN，從儀器面板查看 LAN IPv4 位址。
 5. 在網頁輸入儀器 IP，按連線。儀器 TCP 5025 必須可連線。
-6. 先在輸出 OFF 狀態設定 Source/Sink、CC/CV、電壓與電流，按「套用並讀回驗證」。
+6. 先在輸出 OFF 狀態設定 Source/Sink、CC/CV/CR 與相關參數，按「套用並讀回驗證」。
 7. 核對設定與接線後才按輸出 ON；停止時按 OFF。結束用「OFF 並結束程式」。
 
 不需要安裝 Python、PyVISA、Keysight VISA 或 Go。不需另開 HTML 檔。
@@ -13,10 +13,10 @@ E36731A LAN + HTML 控制介面（Windows 10/11，64 位元）
 
 Source：電壓／電流限制，實際 CC/CV 由負載決定；選單只設定 ON/OFF 轉換偏好。
 Sink：支援 CC／CV；CC 不設定電壓，CV 另設定吸收電流限制。
-不含斜率、內阻或電池模型。本版本採 30 V、20 A、200 W 的應用限制。
+不含斜率、電池 ESR 或電池模型。本版本採 30 V、20 A、200 W 的應用限制。
 Sink 的超限停止是軟體輪詢，不是硬體保護。不要將應用限制當成儀器保護規格。
 
-目前狀態：Windows x64 EXE 已交叉編譯，20 項替身通訊與控制測試及競態檢查通過。
+目前狀態：Windows x64 EXE 已交叉編譯，27 項替身通訊與控制測試及競態檢查通過。
 尚未在 Windows 執行、未完成瀏覽器視覺驗證，也未連接 E36731A 實機；不宣稱已驗證可用。
 請先在不連 DUT 的情況下確認 *IDN?、輸出 OFF、設定讀回，再依設備規格做低功率測試。
 
@@ -26,3 +26,9 @@ Sink 的超限停止是軟體輪詢，不是硬體保護。不要將應用限制
 
 原廠參考：E36731A Programming Guide，E36731-90009，Edition 2，August 2026。
 https://www.keysight.com/us/en/assets/9923-01316/programming-guides/E36731A-Battery-Emulator-Programming-Guide.pdf
+
+v0.2.0：移除發生逾時的 MEAS:POW? 查詢，功率改為依循序量測的 V、I 相乘計算。CSV 欄名為 power_calculated_W。
+請先用面板確認 OFF，關閉舊 EXE，再執行新版。
+
+v0.2.0 新增 Sink CR：讀取與修改電子負載阻值 0.08–4000 Ω，選擇 Sink→CR 後設定 Ω、套用並驗證，輸出仍維持 OFF，需另按 ON。
+這不是電池 ESR，不支援 10 mΩ 電池內阻或雙向即時電池模擬。
