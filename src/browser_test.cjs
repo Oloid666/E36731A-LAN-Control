@@ -7,7 +7,7 @@ const fs=require('fs'),assert=require('assert');
  page.on('pageerror',e=>errors.push(e.message));
  const config={role:'battery',mode:'CV',voltage:3.7,current:.1,ovp:4.3,resistance:100,esr_milliohm:0,min_voltage:3.5,max_voltage:4.2};
  let connected=false,applied=null,output=false,mode='PSUP',busy=false,releasePrepare,slow=true;
- function state(){return {version:'v0.5.0',connected,config:applied,reading:connected?{voltage:output?(applied?.voltage||0):0,current:0,power:0,output,actual:output?'CV':'OFF',emulation:mode,sample_ms:500,time:'TEST'}:null,history:[],logs:['TEST: browser UI with simulated API'],message:connected?'已連線':'未連線',identity:'E36731A · 瀏覽器測試替身',options:{timeout_ms:5000,poll_ms:1000},preferences:{ip:'169.254.30.1',config,options:{timeout_ms:5000,poll_ms:1000}},busy,operation:busy?'一鍵套用：等待儀器讀回':'',last_command:busy?'*OPC?':''}}
+ function state(){return {version:'v0.5.1',connected,config:applied,reading:connected?{voltage:output?(applied?.voltage||0):0,current:0,power:0,output,actual:output?'CV':'OFF',emulation:mode,sample_ms:500,time:'TEST'}:null,history:[],logs:['TEST: browser UI with simulated API'],message:connected?'已連線':'未連線',identity:'E36731A · 瀏覽器測試替身',options:{timeout_ms:5000,poll_ms:1000},preferences:{ip:'169.254.30.1',config,options:{timeout_ms:5000,poll_ms:1000}},busy,operation:busy?'一鍵套用：等待儀器讀回':'',last_command:busy?'VOLT?':''}}
  await page.route('http://127.0.0.1:18765/**',async route=>{
   const req=route.request(),url=new URL(req.url());
   if(url.pathname==='/'){await route.fulfill({contentType:'text/html',body:fs.readFileSync(require('path').join(__dirname,'index.html'),'utf8')});return}
@@ -20,7 +20,8 @@ const fs=require('fs'),assert=require('assert');
    if(slow){await new Promise(resolve=>releasePrepare=resolve);slow=false;await route.fulfill({json:{message:'已取消，保持連線',cancelled:true}});return}
    applied=sent.config;mode='PS2Q';output=false;busy=false;
   }
-  if(sent.action==='off'){if(releasePrepare){releasePrepare();releasePrepare=null;applied=null}output=false;busy=false}
+  if(sent.action==='off'||sent.action==='disconnect'){if(releasePrepare){releasePrepare();releasePrepare=null;applied=null}output=false;busy=false}
+  if(sent.action==='disconnect'){connected=false;applied=null}
   if(sent.action==='on')output=true;
   await route.fulfill({json:{message:'操作完成'}});
  });
@@ -38,8 +39,13 @@ const fs=require('fs'),assert=require('assert');
  assert.equal(mode,'PS2Q');assert.equal(output,false);
  await page.locator('#on').click();await page.waitForFunction(()=>document.getElementById('output').textContent.includes('ON'));
  await page.locator('#off').click();await page.waitForFunction(()=>!document.getElementById('on').disabled);
- await page.screenshot({path:require('path').join(process.env.E36731A_SCREENSHOT_DIR||'/tmp','e36731a-lan-preview-v0.5.0.png'),fullPage:true});
+ await page.screenshot({path:require('path').join(process.env.E36731A_SCREENSHOT_DIR||'/tmp','e36731a-lan-preview-v0.5.1.png'),fullPage:true});
+ assert(await page.locator('#disconnect').isVisible());
+ await page.locator('#disconnect').click();await page.waitForFunction(()=>document.getElementById('message').textContent.includes('自動連線已停止'));
+ assert.equal(connected,false);assert.equal(output,false);assert.equal(await page.locator('#on').isEnabled(),false);
+ const n=actions.length;await page.waitForTimeout(1100);assert.equal(actions.length,n);
+ await page.locator('#connect').click();await page.waitForFunction(()=>document.getElementById('connect').textContent==='已連線');assert.equal(connected,true);
  for(const width of [1280,720,390]){await page.setViewportSize({width,height:1000});assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),`horizontal overflow at ${width}`)}
- assert.deepEqual(errors,[]);console.log('PASS Chromium: default battery, exactly one auto-connect, prepare/stop/retry, edit draft while busy, PS2Q mode, OFF then ON enabled, desktop/mobile layouts; simulated API only');
+ assert.deepEqual(errors,[]);console.log('PASS Chromium: default battery, exactly one auto-connect, prepare/stop/retry, edit draft while busy, PS2Q mode, OFF then ON enabled, visible terminate, no auto-reconnect after terminate, manual reconnect, desktop/mobile layouts; simulated API only');
  await browser.close();
 })().catch(e=>{console.error(e);process.exit(1)});

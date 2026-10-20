@@ -31,18 +31,18 @@ func (c *Controller) verifyPS2Q(p Config) error {
 		q     string
 		value float64
 	}{{"VOLT?", p.Voltage}, {"CURR?", p.Current}, {"VOLT:PROT?", p.OVP}} {
-		if e := c.compare(pair.q, pair.value); e != nil {
+		if e := c.checkedCompare(pair.q, pair.value); e != nil {
 			return e
 		}
 	}
-	enabled, e := c.flag("VOLT:PROT:STAT?")
+	enabled, e := c.checkedFlag("VOLT:PROT:STAT?")
 	if e != nil {
 		return e
 	}
 	if !enabled {
-		return errors.New("PS2Q 模式要求 OVP 啟用")
+		return &readbackMismatch{"VOLT:PROT:STAT?", 0, 1}
 	}
-	tripped, e := c.flag("VOLT:PROT:TRIP?")
+	tripped, e := c.checkedFlag("VOLT:PROT:TRIP?")
 	if e != nil {
 		return e
 	}
@@ -91,7 +91,7 @@ func (c *Controller) diagnose() error {
 	if mode == "LOAD" {
 		queries = append(queries, "FUNC?", "RES?")
 	} else if mode == "PSUP" || mode == "PS2Q" {
-		queries = append(queries, "VOLT?", "CURR?", "VOLT:PROT?", "VOLT:PROT:STAT?")
+		queries = append(queries, "VOLT?", "CURR?", "VOLT:PROT?", "VOLT:PROT:STAT?", "VOLT:PROT:TRIP?")
 	}
 	for _, q := range queries {
 		started := time.Now()

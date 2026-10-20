@@ -25,6 +25,7 @@ type fakeInstrument struct {
 	timeout         string
 	input           float64
 	errorOn         map[string]string
+	readbacks       map[string][]string
 	rejectPS2Q      bool
 	resetSession    bool
 	measuredCurrent *float64
@@ -147,6 +148,10 @@ func (f *fakeInstrument) serve(conn net.Conn) {
 					f.values["RES"] = strings.SplitN(cmd, ";:RES ", 2)[1]
 				}
 			}
+		}
+		if answers := f.readbacks[cmd]; query && len(answers) > 0 {
+			answer = answers[0]
+			f.readbacks[cmd] = answers[1:]
 		}
 		if errorText, ok := f.errorOn[cmd]; ok {
 			f.errors = append(f.errors, errorText)

@@ -82,7 +82,7 @@ type Controller struct {
 func NewController() *Controller {
 	c := &Controller{dial: net.DialTimeout}
 	c.state.Message = "未連線；實機驗證尚未完成"
-	c.state.Version = "v0.5.0"
+	c.state.Version = "v0.5.1"
 	c.state.Options = DefaultOptions()
 	c.state.Preferences = DefaultPreferences()
 	c.heartbeat.Store(time.Now().UnixNano())
@@ -112,7 +112,7 @@ func (c *Controller) progress(message string) {
 	c.log("STEP " + message)
 }
 
-var errCancelled = errors.New("操作已被 OFF 要求取消")
+var errCancelled = errors.New("操作已被停止要求取消")
 
 func (c *Controller) log(s string) {
 	line := time.Now().Format("15:04:05.000 ") + s
@@ -394,12 +394,14 @@ func (c *Controller) apply(p Config) error {
 			return e
 		}
 	}
-	commands := []string{"SYST:REM"}
+	commands := []string{}
 	if p.Role != "battery" {
-		commands = append(commands, "INIT:CONT:TRAN OFF", "ABOR:TRAN", "VOLT:MODE FIX", "CURR:MODE FIX", "OUTP:DEL:RISE 0", "OUTP:DEL:FALL 0")
+		commands = append(commands, "SYST:REM", "INIT:CONT:TRAN OFF", "ABOR:TRAN", "VOLT:MODE FIX", "CURR:MODE FIX", "OUTP:DEL:RISE 0", "OUTP:DEL:FALL 0")
 	}
 	if p.Role == "battery" {
-		commands = append(commands, fmt.Sprintf("VOLT:PROT %.9g", p.OVP), "VOLT:PROT:STAT ON", fmt.Sprintf("CURR %.9g", p.Current), fmt.Sprintf("VOLT %.9g", p.Voltage))
+		// PS2Q does not need a separate front-panel lock command. Do not
+		// redundantly set OVP enable when the instrument already reports ON.
+		commands = append(commands, fmt.Sprintf("VOLT:PROT %.9g", p.OVP), fmt.Sprintf("CURR %.9g", p.Current), fmt.Sprintf("VOLT %.9g", p.Voltage))
 	} else if p.Role == "source" {
 		preferred := "VOLT"
 		if p.Mode == "CC" {
@@ -425,18 +427,46 @@ func (c *Controller) apply(p Config) error {
 		}
 	}
 	for _, cmd := range commands {
-		if e = c.write(cmd); e != nil {
+		c.progress("套用並檢查：" + cmd)
+		if e = c.checkedWrite(cmd); e != nil {
+			return e
+		}
+		if p.Role == "battery" && strings.HasPrefix(cmd, "VOLT:PROT ") {
+			enabled, err := c.checkedFlag("VOLT:PROT:STAT?")
+			if err != nil {
+				return err
+			}
+			if !enabled {
+				if e = c.checkedWrite("VOLT:PROT:STAT ON"); e != nil {
+					return e
+				}
+			} else {
+				c.log("CHECK OVP 已啟用，保留啟用狀態；未重送 VOLT:PROT:STAT ON")
+			}
+		}
+	}
+	if p.Role == "battery" {
+		c.progress("PS2Q 逐條讀回驗證，不傳送 *OPC?")
+		if e = c.waitPS2QReadback(p); e != nil {
+			return e
+		}
+	} else {
+		if e = c.opc(); e != nil {
+			return e
+		}
+		if e = c.errors(); e != nil {
+			return e
+		}
+		if e = c.verify(p); e != nil {
 			return e
 		}
 	}
-	if e = c.opc(); e != nil {
+	on, e = c.checkedFlag("OUTP?")
+	if e != nil {
 		return e
 	}
-	if e = c.errors(); e != nil {
-		return e
-	}
-	if e = c.verify(p); e != nil {
-		return e
+	if on {
+		return errors.New("套用完成後儀器回報 ON，未建立可用設定；要求 OFF")
 	}
 	c.state.Config = &p
 	c.state.Error = ""
@@ -460,7 +490,13 @@ func (c *Controller) verify(p Config) error {
 	} else if p.Role == "battery" {
 		expected = "PS2Q"
 	}
-	s, e := c.query("EMUL?")
+	var s string
+	var e error
+	if p.Role == "battery" {
+		s, e = c.checkedQuery("EMUL?")
+	} else {
+		s, e = c.query("EMUL?")
+	}
 	if e != nil {
 		return e
 	}
@@ -634,7 +670,13 @@ func (c *Controller) off() error {
 	return nil
 }
 func (c *Controller) disconnect() error {
+	if c.conn == nil && c.state.Unknown {
+		if e := c.stopOutput(); e != nil {
+			return e
+		}
+	}
 	if c.conn == nil {
+		c.state.Message = "已終止連線；目前未連接儀器"
 		return nil
 	}
 	if e := c.off(); e != nil {
@@ -655,6 +697,10 @@ func (c *Controller) disconnect() error {
 func (c *Controller) fail(err error) {
 	failedCommand := c.state.LastCommand
 	c.state.LastFailure = fmt.Sprintf("%s → %v", failedCommand, err)
+	var ce *commandError
+	if errors.As(err, &ce) {
+		c.state.LastFailure = err.Error()
+	}
 	hadConnection := c.conn != nil
 	confirmedOff := false
 	if hadConnection {

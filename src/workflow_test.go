@@ -93,7 +93,7 @@ func TestOffCanBeFollowedByOnWithoutReapplyButChecksChanges(t *testing.T) {
 	}
 }
 
-func TestOffDuringSlowOPCPreservesConnectionAndStateEndpoint(t *testing.T) {
+func TestOffDuringSlowPS2QReadbackPreservesConnectionAndStateEndpoint(t *testing.T) {
 	c, f := setup(t)
 	c.state.IP = "169.254.30.1"
 	release := make(chan struct{})
@@ -101,7 +101,7 @@ func TestOffDuringSlowOPCPreservesConnectionAndStateEndpoint(t *testing.T) {
 	var once sync.Once
 	defer once.Do(func() { close(release) })
 	f.mu.Lock()
-	f.gateCommand = "*OPC?"
+	f.gateCommand = "VOLT?"
 	f.gateEntered = entered
 	f.gateRelease = release
 	f.mu.Unlock()
@@ -111,7 +111,7 @@ func TestOffDuringSlowOPCPreservesConnectionAndStateEndpoint(t *testing.T) {
 	select {
 	case <-entered:
 	case <-time.After(3 * time.Second):
-		t.Fatal("did not reach OPC")
+		t.Fatal("did not reach readback")
 	}
 	// HTTP state must return progress despite the SCPI mutex being held.
 	gotState := make(chan *httptest.ResponseRecorder, 1)
@@ -128,11 +128,11 @@ func TestOffDuringSlowOPCPreservesConnectionAndStateEndpoint(t *testing.T) {
 			Busy        bool   `json:"busy"`
 			LastCommand string `json:"last_command"`
 		}
-		if json.Unmarshal(w.Body.Bytes(), &state) != nil || !state.Busy || state.LastCommand != "*OPC?" {
+		if json.Unmarshal(w.Body.Bytes(), &state) != nil || !state.Busy || state.LastCommand != "VOLT?" {
 			t.Fatal(w.Body.String())
 		}
 	case <-time.After(250 * time.Millisecond):
-		t.Fatal("state endpoint blocked on OPC")
+		t.Fatal("state endpoint blocked on readback")
 	}
 	stopped := make(chan *httptest.ResponseRecorder, 1)
 	go func() { stopped <- testRequest(s, "off", Config{}) }()
@@ -157,6 +157,80 @@ func TestOffDuringSlowOPCPreservesConnectionAndStateEndpoint(t *testing.T) {
 	if !c.state.Connected || c.conn == nil || c.state.Unknown || c.state.Reading.Output || c.state.Config != nil || c.state.Error != "" {
 		t.Fatalf("cancel became connection failure: %+v", c.state)
 	}
+	w := testRequest(s, "prepare", batteryConfig())
+	if w.Code != 200 {
+		t.Fatal("could not prepare again", w.Body.String())
+	}
+	if has(f, "OUTP ON") {
+		t.Fatal("cancel/retry enabled output")
+	}
+}
+
+func TestTerminateDuringSlowPS2QReadbackConfirmsOffAndDisconnects(t *testing.T) {
+	c, f := setup(t)
+	c.state.IP = "169.254.30.1"
+	release := make(chan struct{})
+	entered := make(chan struct{})
+	var once sync.Once
+	defer once.Do(func() { close(release) })
+	f.mu.Lock()
+	f.gateCommand = "VOLT?"
+	f.gateEntered = entered
+	f.gateRelease = release
+	f.mu.Unlock()
+	s := &Server{controller: c, host: "localhost", token: "s"}
+	applied := make(chan *httptest.ResponseRecorder, 1)
+	go func() { applied <- testRequest(s, "prepare", batteryConfig()) }()
+	select {
+	case <-entered:
+	case <-time.After(3 * time.Second):
+		t.Fatal("did not reach readback")
+	}
+	// HTTP state must return progress despite the SCPI mutex being held.
+	gotState := make(chan *httptest.ResponseRecorder, 1)
+	go func() {
+		r := httptest.NewRequest("GET", "http://localhost/api/state", nil)
+		r.Header.Set("X-Control-Token", "s")
+		w := httptest.NewRecorder()
+		s.ServeHTTP(w, r)
+		gotState <- w
+	}()
+	select {
+	case w := <-gotState:
+		var state struct {
+			Busy        bool   `json:"busy"`
+			LastCommand string `json:"last_command"`
+		}
+		if json.Unmarshal(w.Body.Bytes(), &state) != nil || !state.Busy || state.LastCommand != "VOLT?" {
+			t.Fatal(w.Body.String())
+		}
+	case <-time.After(250 * time.Millisecond):
+		t.Fatal("state endpoint blocked on readback")
+	}
+	stopped := make(chan *httptest.ResponseRecorder, 1)
+	go func() { stopped <- testRequest(s, "disconnect", Config{}) }()
+	until := time.Now().Add(time.Second)
+	for c.emergencies.Load() == 0 && time.Now().Before(until) {
+		time.Sleep(time.Millisecond)
+	}
+	if c.emergencies.Load() == 0 {
+		t.Fatal("OFF not queued")
+	}
+	once.Do(func() { close(release) })
+	for _, done := range []chan *httptest.ResponseRecorder{applied, stopped} {
+		select {
+		case w := <-done:
+			if w.Code != 200 {
+				t.Fatal(w.Code, w.Body.String())
+			}
+		case <-time.After(3 * time.Second):
+			t.Fatal("operation did not finish")
+		}
+	}
+	if c.state.Connected || c.conn != nil || c.state.Unknown || c.state.Reading != nil || c.state.Config != nil || c.state.Error != "" || !has(f, "OUTP OFF") {
+		t.Fatalf("terminate did not confirm OFF and disconnect: %+v", c.state)
+	}
+
 	w := testRequest(s, "prepare", batteryConfig())
 	if w.Code != 200 {
 		t.Fatal("could not prepare again", w.Body.String())
@@ -238,5 +312,49 @@ func TestStopOutputDoesNotWriteToDifferentInstrument(t *testing.T) {
 	}
 	if has(other, "OUTP OFF") || c.conn != nil || !c.state.Unknown {
 		t.Fatal("unidentified instrument received control")
+	}
+}
+
+func TestTerminateDuringAutomaticConnection(t *testing.T) {
+	c, f := unconnectedFake(t)
+	release := make(chan struct{})
+	entered := make(chan struct{})
+	var once sync.Once
+	defer once.Do(func() { close(release) })
+	f.mu.Lock()
+	f.gateCommand = "*IDN?"
+	f.gateEntered = entered
+	f.gateRelease = release
+	f.mu.Unlock()
+	s := &Server{controller: c, host: "localhost", token: "s"}
+	connecting := make(chan *httptest.ResponseRecorder, 1)
+	go func() { connecting <- testRequest(s, "connect", Config{}) }()
+	select {
+	case <-entered:
+	case <-time.After(time.Second):
+		t.Fatal("connect did not start")
+	}
+	terminating := make(chan *httptest.ResponseRecorder, 1)
+	go func() { terminating <- testRequest(s, "disconnect", Config{}) }()
+	until := time.Now().Add(time.Second)
+	for c.emergencies.Load() == 0 && time.Now().Before(until) {
+		time.Sleep(time.Millisecond)
+	}
+	if c.emergencies.Load() == 0 {
+		t.Fatal("terminate not accepted while connecting")
+	}
+	once.Do(func() { close(release) })
+	for _, done := range []chan *httptest.ResponseRecorder{connecting, terminating} {
+		select {
+		case w := <-done:
+			if w.Code != 200 {
+				t.Fatal(w.Code, w.Body.String())
+			}
+		case <-time.After(time.Second):
+			t.Fatal("terminate did not finish")
+		}
+	}
+	if c.conn != nil || c.state.Connected || c.state.Unknown || c.state.Config != nil || has(f, "OUTP ON") || !has(f, "OUTP OFF") {
+		t.Fatalf("automatic connection survived termination: %+v", c.state)
 	}
 }

@@ -293,7 +293,7 @@ func TestDebugExportOmitsSessionSecret(t *testing.T) {
 		t.Fatal(w.Code)
 	}
 	var value State
-	if json.Unmarshal(w.Body.Bytes(), &value) != nil || value.Version != "v0.5.0" {
+	if json.Unmarshal(w.Body.Bytes(), &value) != nil || value.Version != "v0.5.1" {
 		t.Fatal("export missing version")
 	}
 }

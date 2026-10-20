@@ -34,7 +34,7 @@ async function tests(){
  b.run('state={connected:true,debug_only:true,reading:{output:false},config:params()};controls()');assert.equal(e('on').disabled,true);assert.equal(e('apply').disabled,false);
  b.run('unavailable("lost")');assert.equal(e('on').disabled,true);assert.equal(e('apply').disabled,false);
  // Clipboard snapshot and denial fallback work even after losing local service.
- b.ctx.rows=Array.from({length:100},(_,i)=>'TX/RX '+i);b.run('state={version:"v0.5.0",logs:rows}');
+ b.ctx.rows=Array.from({length:100},(_,i)=>'TX/RX '+i);b.run('state={version:"v0.5.1",logs:rows}');
  let copied='';b.ctx.navigator={clipboard:{writeText:async text=>{copied=text}}};await e('copyRecent').onclick();assert(copied.includes('TX/RX 20\n'));assert(!copied.includes('TX/RX 19\n'));assert(copied.endsWith('TX/RX 99'));
  b.ctx.navigator.clipboard.writeText=async()=>{throw Error('denied')};e('logs').textContent=b.ctx.rows.join('\n');b.run('state=null');await e('copyRecent').onclick();assert.equal(e('copyText').value,copied);
  // Bootstrap auto-connects once, without configuring or enabling output.
@@ -42,6 +42,28 @@ async function tests(){
  a.ctx.fetch=async(path,options)=>{if(path==='/api/action'){calls.push(JSON.parse(options.body));return response({message:'connected'})}return response({connected:true,reading,logs:[],preferences:{},config:null})};
  a.run('token="t";hydrated=true;maybeAutoConnect();maybeAutoConnect()');await flush();await flush();
  assert.deepEqual(calls.map(x=>x.action),['connect']);assert.equal(a.element('apply').disabled,false);
+ // Terminate before hydration prevents automatic connection, until manual retry.
+ const h=browser(),halts=[];let haltConnected=false;
+ h.ctx.fetch=async(path,options)=>{
+  if(path==='/api/action'){const name=JSON.parse(options.body).action;halts.push(name);haltConnected=name==='connect';return response({message:'done'})}
+  return response({connected:haltConnected,reading:haltConnected?reading:null,logs:[],preferences:{},config:null});
+ };
+ assert.equal(h.element('disconnect').disabled,false);
+ await h.run('action("disconnect")');await flush();
+ h.run('token="t";hydrated=true;maybeAutoConnect();maybeAutoConnect()');await flush();
+ assert.deepEqual(halts,['disconnect']);assert.equal(h.run('autoConnectPaused'),true);
+ assert(h.element('message').textContent.includes('自動連線已停止'));
+ await h.run('action("connect")');await flush();assert.deepEqual(halts,['disconnect','connect']);assert.equal(h.run('autoConnectPaused'),false);
+ // Terminate remains available during an in-flight auto-connect.
+ const d=browser(),dcalls=[];let finishConnect;
+ d.ctx.fetch=async(path,options)=>{
+  if(path==='/api/action'){const name=JSON.parse(options.body).action;dcalls.push(name);if(name==='connect')return new Promise(resolve=>finishConnect=()=>resolve(response({message:'cancelled'})));return response({message:'OFF and disconnected'})}
+  return response({connected:false,reading:null,logs:[],config:null});
+ };
+ d.run('token="t";hydrated=true;maybeAutoConnect()');
+ assert.equal(d.element('disconnect').disabled,false);
+ const terminated=d.run('action("disconnect")');finishConnect();await terminated;await flush();await flush();
+ d.run('maybeAutoConnect()');assert.deepEqual(dcalls,['connect','disconnect']);assert.equal(d.run('working'),false);
  // A slow prepare sends a fixed snapshot; OFF keeps its own pending state.
  const w=browser(),actions=[];let finishPrepare,finishOff;
  w.ctx.fetch=async(path,options)=>{
@@ -58,6 +80,6 @@ async function tests(){
  finishPrepare();await preparing;await flush();assert.equal(w.run('working'),true);assert.equal(w.element('apply').disabled,true);
  finishOff();await stopping;await flush();assert.equal(w.run('working'),false);assert.equal(w.element('apply').disabled,false);
  assert.deepEqual(actions.map(x=>x.action),['prepare','off']);assert.equal(actions[0].config.role,'battery');
- console.log('PASS UI logic: default battery, draft presets and V steps during ON/busy, ON explanations, one-shot read-only autoconnect, immutable prepare payload, concurrent OFF lifecycle, copy fallback');
+ console.log('PASS UI logic: default battery, draft presets and V steps during ON/busy, ON explanations, one-shot read-only autoconnect, immutable prepare payload, concurrent OFF lifecycle, terminate before/during auto-connect, explicit reconnect, copy fallback');
 }
 tests().catch(error=>{console.error(error);process.exitCode=1});
