@@ -3,7 +3,6 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"math"
 	"net"
 	"net/http/httptest"
 	"os"
@@ -26,7 +25,7 @@ func unconnectedFake(t *testing.T) (*Controller, *fakeInstrument) {
 	return c, f
 }
 func batteryConfig() Config {
-	return Config{Role: "battery", Mode: "ESR", Voltage: 3.7, Current: 1, OVP: 4.3, ESRMilliohm: 10, MinVoltage: 3.5, MaxVoltage: 4.2}
+	return Config{Role: "battery", Mode: "CV", Voltage: 3.7, Current: 1, OVP: 4.3, ESRMilliohm: 0, MinVoltage: 3.5, MaxVoltage: 4.2}
 }
 func TestConnectionBaseline305DoesNotDisconnect(t *testing.T) {
 	c, f := unconnectedFake(t)
@@ -88,26 +87,33 @@ func TestDiagnosticConnectDoesNotPollOrEnable(t *testing.T) {
 		t.Fatal("diagnostic enabled hardware")
 	}
 }
-func TestESRFormulaBothDirections(t *testing.T) {
-	p := batteryConfig()
-	for _, test := range []struct{ i, v float64 }{{1, 3.69}, {-1, 3.71}, {0, 3.7}} {
-		v, e := esrTarget(p, test.i)
-		if e != nil || math.Abs(v-test.v) > 1e-9 {
-			t.Fatal(test, e, v)
+func TestNativeESRRequestRejectedBeforeAnyCommand(t *testing.T) {
+	c, f := setup(t)
+	for _, esr := range []float64{10, 100, -10} {
+		p := batteryConfig()
+		p.ESRMilliohm = esr
+		f.mu.Lock()
+		before := len(f.commands)
+		f.mu.Unlock()
+		if err := c.apply(p); err == nil || !strings.Contains(err.Error(), "硬體 ESR") {
+			t.Fatal("unsupported native ESR accepted", err)
+		}
+		f.mu.Lock()
+		after := len(f.commands)
+		f.mu.Unlock()
+		if before != after {
+			t.Fatal("ESR request sent instrument commands")
 		}
 	}
 }
-func TestESRRejectsCurrentAndVoltageOutsideModel(t *testing.T) {
+func TestLegacySoftwareESRModeRejected(t *testing.T) {
 	p := batteryConfig()
-	if _, e := esrTarget(p, 2); e == nil {
-		t.Fatal("overcurrent accepted")
-	}
-	p.ESRMilliohm = 1000
-	if _, e := esrTarget(p, 1); e == nil {
-		t.Fatal("target outside voltage range accepted")
+	p.Mode = "ESR"
+	if p.validate() == nil {
+		t.Fatal("removed software mode accepted")
 	}
 }
-func TestESRValidationRejectsUnsafeRanges(t *testing.T) {
+func TestPS2QValidationRejectsUnsafeRanges(t *testing.T) {
 	cases := []Config{}
 	p := batteryConfig()
 	p.MinVoltage = 4
@@ -127,7 +133,7 @@ func TestESRValidationRejectsUnsafeRanges(t *testing.T) {
 		}
 	}
 }
-func TestESRApplyUsesPS2QNotLoadRES(t *testing.T) {
+func TestPS2QApplyUsesNativeModeWithoutRES(t *testing.T) {
 	c, f := setup(t)
 	p := batteryConfig()
 	if e := c.apply(p); e != nil {
@@ -154,37 +160,64 @@ func TestPS2QRejectionStopsBeforeOn(t *testing.T) {
 		t.Fatal("unsupported PS2Q armed")
 	}
 }
-func TestESRFeedbackFollowsMeasuredDirection(t *testing.T) {
+func TestPS2QSamplesDoNotAdjustVoltageInEitherDirection(t *testing.T) {
 	c, f := setup(t)
 	p := batteryConfig()
-	if e := c.apply(p); e != nil {
-		t.Fatal(e)
+	if err := c.apply(p); err != nil {
+		t.Fatal(err)
 	}
-	discharge := 1.0
+	if err := c.on(p); err != nil {
+		t.Fatal(err)
+	}
 	f.mu.Lock()
-	f.measuredCurrent = &discharge
+	before := len(f.commands)
 	f.mu.Unlock()
-	if e := c.on(p); e != nil {
-		t.Fatal(e)
+	for _, i := range []float64{1, -1, 0, .5, -.5} {
+		current := i
+		f.mu.Lock()
+		f.measuredCurrent = &current
+		f.mu.Unlock()
+		if err := c.sample(); err != nil {
+			t.Fatal(err)
+		}
 	}
-	if math.Abs(c.esrCommand-3.695) > 1e-9 {
-		t.Fatal("discharge step", c.esrCommand)
-	}
-	charge := -1.0
 	f.mu.Lock()
-	f.measuredCurrent = &charge
-	f.mu.Unlock()
-	if e := c.sample(); e != nil {
-		t.Fatal(e)
+	defer f.mu.Unlock()
+	for _, cmd := range f.commands[before:] {
+		if !strings.Contains(cmd, "?") {
+			t.Fatal("monitoring wrote to hardware", cmd)
+		}
 	}
-	if math.Abs(c.esrCommand-3.7) > 1e-9 {
-		t.Fatal("charge step", c.esrCommand)
-	}
-	if c.state.Reading.ESRTarget == nil || math.Abs(*c.state.Reading.ESRTarget-3.71) > 1e-9 {
-		t.Fatal("model target missing")
+	if f.values["VOLT"] != "3.7" {
+		t.Fatal("voltage drifted")
 	}
 }
-func TestESRNoFeedbackAfterOff(t *testing.T) {
+func TestPS2QBidirectionalCurrentMonitorStopsOverLimit(t *testing.T) {
+	for _, i := range []float64{2, -2} {
+		t.Run(fmt.Sprint(i), func(t *testing.T) {
+			c, f := setup(t)
+			p := batteryConfig()
+			if err := c.apply(p); err != nil {
+				t.Fatal(err)
+			}
+			if err := c.on(p); err != nil {
+				t.Fatal(err)
+			}
+			f.mu.Lock()
+			f.measuredCurrent = &i
+			f.mu.Unlock()
+			err := c.sample()
+			if err == nil || !strings.Contains(err.Error(), "雙向軟體電流") {
+				t.Fatal("overcurrent ignored", err)
+			}
+			c.fail(err)
+			if c.state.Unknown || c.state.Config != nil {
+				t.Fatal("OFF not confirmed")
+			}
+		})
+	}
+}
+func TestPS2QNoMonitoringAfterOff(t *testing.T) {
 	c, f := setup(t)
 	p := batteryConfig()
 	if e := c.apply(p); e != nil {
@@ -196,8 +229,8 @@ func TestESRNoFeedbackAfterOff(t *testing.T) {
 	if e := c.sample(); e != nil {
 		t.Fatal(e)
 	}
-	if c.state.Config != nil || c.state.Reading.ESRTarget != nil {
-		t.Fatal("ESR remained armed")
+	if c.state.Config != nil {
+		t.Fatal("PS2Q remained armed")
 	}
 	if has(f, "OUTP ON") {
 		t.Fatal("unexpected ON")
@@ -233,7 +266,7 @@ func TestPreferencesPersistWithoutHardwareCommands(t *testing.T) {
 	fresh := NewController()
 	fresh.preferencesPath = c.preferencesPath
 	fresh.loadPreferences()
-	if fresh.state.Preferences.IP != "169.254.30.1" || fresh.state.Preferences.Config.ESRMilliohm != 10 {
+	if fresh.state.Preferences.IP != "169.254.30.1" || fresh.state.Preferences.Config.ESRMilliohm != 0 {
 		t.Fatal("settings lost")
 	}
 	if fresh.conn != nil || fresh.state.Config != nil {
@@ -260,7 +293,7 @@ func TestDebugExportOmitsSessionSecret(t *testing.T) {
 		t.Fatal(w.Code)
 	}
 	var value State
-	if json.Unmarshal(w.Body.Bytes(), &value) != nil || value.Version != "v0.3.2" {
+	if json.Unmarshal(w.Body.Bytes(), &value) != nil || value.Version != "v0.4.0" {
 		t.Fatal("export missing version")
 	}
 }
@@ -271,5 +304,26 @@ func TestConnectionOptionsAreBounded(t *testing.T) {
 	got, e := (ConnectionOptions{}).normalized()
 	if e != nil || got != DefaultOptions() {
 		t.Fatal(got, e)
+	}
+}
+
+func TestLegacyPreferencesMigrateWithoutHardwareESRClaim(t *testing.T) {
+	c := NewController()
+	c.preferencesPath = filepath.Join(t.TempDir(), "preferences.json")
+	p := DefaultPreferences()
+	p.Config = batteryConfig()
+	p.Config.Mode = "ESR"
+	p.Config.ESRMilliohm = 100
+	b, _ := json.Marshal(p)
+	if err := os.WriteFile(c.preferencesPath, b, 0600); err != nil {
+		t.Fatal(err)
+	}
+	c.loadPreferences()
+	got := c.state.Preferences.Config
+	if got.Mode != "CV" || got.ESRMilliohm != 0 || c.conn != nil || c.state.Config != nil {
+		t.Fatalf("unsafe migration: %+v", got)
+	}
+	if !strings.Contains(strings.Join(c.state.Logs, "\n"), "software ESR removed") {
+		t.Fatal("migration not logged")
 	}
 }

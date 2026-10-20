@@ -1,15 +1,14 @@
 // Logic-only browser substitute. This is not visual/browser QA.
 const vm=require('vm'),fs=require('fs'),assert=require('assert');
-const defaults={role:'source',mode:'CV',ip:'169.254.30.1',setv:'3.7',seti:'.1',ovp:'4.3',setr:'100',esr:'10',minv:'3.5',maxv:'4.2',previewi:'1',timeout:'5000',pollms:'1000'};
+const defaults={role:'source',mode:'CV',ip:'169.254.30.1',setv:'3.7',seti:'.1',ovp:'4.3',setr:'100',esr:'尚未設定',minv:'3.5',maxv:'4.2',timeout:'5000',pollms:'1000'};
 const nodes={};const noop=()=>{};
-function element(id){return nodes[id]??={value:defaults[id]??'',textContent:'',classList:{toggle:noop},disabled:false,addEventListener:noop,setAttribute(key,value){this[key]=value},clientWidth:600,clientHeight:240,options:['CV','CC','CR','ESR'].map(value=>({value,disabled:false})),getContext:()=>new Proxy({},{get:()=>noop})}}
+function element(id){return nodes[id]??={value:defaults[id]??'',textContent:'',classList:{toggle:noop},disabled:false,addEventListener:noop,setAttribute(key,value){this[key]=value},focus:noop,select:noop,clientWidth:600,clientHeight:240,options:['CV','CC','CR'].map(value=>({value,disabled:false})),getContext:()=>new Proxy({},{get:()=>noop})}}
 const code=fs.readFileSync('index.html','utf8').split('<script>')[1].split('</script>')[0];
 const context={document:{getElementById:element,createElement:()=>({click:noop})},location:{hash:'',pathname:'/'},sessionStorage:{getItem:()=>null,setItem:noop},history:{replaceState:noop},window:{addEventListener:noop},devicePixelRatio:1,setTimeout:noop,setInterval:noop,Blob,URL,console};
 vm.createContext(context);vm.runInContext(code,context);
 assert.equal(element('ip').value,'169.254.30.1');
 element('role').value='battery';vm.runInContext('adjust()',context);
-assert.equal(element('mode').value,'ESR');assert.equal(element('esr').value,'10');
-assert(element('esrpreview').textContent.includes('3.690000'));
+assert.equal(element('mode').value,'CV');assert.equal(element('esr').value,'尚未設定');assert.equal(element('esr').disabled,true);
 element('role').value='sink';element('mode').value='CR';vm.runInContext('adjust()',context);
 assert.equal(element('setr').disabled,false);assert.equal(element('seti').disabled,true);
 vm.runInContext(`state={connected:true,debug_only:true,reading:{output:false},config:params()};controls()`,context);
@@ -27,7 +26,7 @@ for(const n of [1,2,3,4]){
  assert.equal(element(`preset-battery-${n}`)['aria-pressed'],'true');
 }
 for(const n of [1,2,4,8]){element(`preset-io-${n}`).onclick();assert.equal(+element('seti').value,n)}
-for(const n of [0,10,100]){element(`preset-esr-${n}`).onclick();assert.equal(+element('esr').value,n)}
+for(const n of [0,10,100]){element(`preset-esr-${n}`).onclick();assert.equal(element('esr').value,'尚未設定');assert.equal(element(`preset-esr-${n}`).disabled,true)}
 vm.runInContext('state={connected:true,config:params(),reading:{output:false}};controls()',context);
 assert.equal(element('on').disabled,false);
 element('preset-battery-1').onclick();assert.equal(element('on').disabled,true);
@@ -44,4 +43,20 @@ const before=JSON.stringify(vm.runInContext('params()',context));
 element('preset-battery-2').onclick();element('preset-io-4').onclick();element('preset-esr-0').onclick();
 assert.equal(JSON.stringify(vm.runInContext('params()',context)),before);
 assert.equal(element('preset-io-4').disabled,true);
-console.log('PASS UI logic: default IP, ESR preview, CR fields, diagnostic interlocks, settings verification, lost connection, all presets, draft-only actions and output interlocks');
+async function testCopy(){
+ const rows=Array.from({length:100},(_,i)=>'TX/RX '+i);
+ context.rows=rows;
+ vm.runInContext('state={version:"v0.4.0",logs:rows}',context);
+ let copied='';context.navigator={clipboard:{writeText:async text=>{copied=text}}};
+ await element('copyRecent').onclick();
+ assert(copied.includes('TX/RX 20\n'));assert(!copied.includes('TX/RX 19\n'));assert(copied.endsWith('TX/RX 99'));
+ context.navigator.clipboard.writeText=async()=>{throw Error('denied')};
+ await element('copyRecent').onclick();assert.equal(element('copyText').value,copied);
+ // Preserve received logs when the local service is unavailable.
+ element('logs').textContent=rows.join('\n');vm.runInContext('state=null',context);
+ await element('copyRecent').onclick();assert(element('copyText').value.endsWith('TX/RX 99'));
+ element('logs').textContent='尚無通訊紀錄。';await element('copyRecent').onclick();
+ assert.equal(element('copyStatus').textContent,'尚無通訊紀錄可複製');
+ console.log('PASS UI logic: PS2Q CV, ESR disabled, battery/Io presets, diagnostic and ON interlocks, latest 80 log lines, denied clipboard fallback, lost connection');
+}
+testCopy().catch(error=>{console.error(error);process.exitCode=1});

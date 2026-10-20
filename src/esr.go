@@ -3,7 +3,6 @@ package main
 import (
 	"errors"
 	"fmt"
-	"math"
 	"time"
 )
 
@@ -25,13 +24,13 @@ func (o ConnectionOptions) normalized() (ConnectionOptions, error) {
 	}
 	return o, nil
 }
-func (c *Controller) verifyESR(p Config) error {
-	// Public guide documents PS2Q and VOLT/CURR/OVP, not an ESR register.
-	// This verifies a host-controlled voltage setpoint, never a native ESR setting.
+func (c *Controller) verifyPS2Q(p Config) error {
+	// Verify only documented fixed PS2Q voltage/current/OVP settings.
+	// No native ESR command is documented or sent.
 	for _, pair := range []struct {
 		q     string
 		value float64
-	}{{"VOLT?", c.esrCommand}, {"CURR?", p.Current}, {"VOLT:PROT?", p.OVP}} {
+	}{{"VOLT?", p.Voltage}, {"CURR?", p.Current}, {"VOLT:PROT?", p.OVP}} {
 		if e := c.compare(pair.q, pair.value); e != nil {
 			return e
 		}
@@ -41,7 +40,7 @@ func (c *Controller) verifyESR(p Config) error {
 		return e
 	}
 	if !enabled {
-		return errors.New("ESR 模式要求 OVP 啟用")
+		return errors.New("PS2Q 模式要求 OVP 啟用")
 	}
 	tripped, e := c.flag("VOLT:PROT:TRIP?")
 	if e != nil {
@@ -52,67 +51,17 @@ func (c *Controller) verifyESR(p Config) error {
 	}
 	return c.errors()
 }
-func esrTarget(p Config, current float64) (float64, error) {
-	if math.IsNaN(current) || math.IsInf(current, 0) {
-		return 0, errors.New("ESR 電流讀值無效")
-	}
-	if math.Abs(current) > p.Current+0.002 {
-		return 0, errors.New("ESR 超過設定的雙向軟體電流監控值")
-	}
-	target := p.Voltage - current*p.ESRMilliohm/1000
-	if target < p.MinVoltage || target > p.MaxVoltage {
-		return 0, fmt.Errorf("ESR 計算端電壓 %.6g V 超出設定範圍，停止而非截斷模型", target)
-	}
-	return target, nil
-}
-func esrNext(previous, target float64) float64 {
-	// A maximum 5 mV change per poll limits sudden software-induced steps.
-	delta := target - previous
-	if delta > .005 {
-		delta = .005
-	}
-	if delta < -.005 {
-		delta = -.005
-	}
-	return previous + delta
-}
-func (c *Controller) feedbackESR(r *Reading) error {
+
+// Monitoring never adjusts voltage based on measured current.
+func (c *Controller) monitorPS2Q(r *Reading) error {
 	p := *c.state.Config
-	if r.Emulation != "PS2Q" {
-		return errors.New("ESR 需要 PS2Q 模式")
-	}
 	if r.Voltage < p.MinVoltage-.01 || r.Voltage > p.MaxVoltage+.01 {
-		return errors.New("ESR 實測電壓超出允許範圍")
+		return errors.New("PS2Q 實測電壓超出允許範圍")
 	}
-	// Detect another controller/front-panel changing the voltage/current limits.
-	if e := c.verifyESR(p); e != nil {
-		return e
+	if r.Current > p.Current+.002 || r.Current < -p.Current-.002 {
+		return errors.New("PS2Q 超過雙向軟體電流監控值；此監控不是硬體 Sink 限流")
 	}
-	target, e := esrTarget(p, r.Current)
-	if e != nil {
-		return e
-	}
-	next := esrNext(c.esrCommand, target)
-	if math.Abs(next-c.esrCommand) >= 0.00065 {
-		if e = c.write(fmt.Sprintf("VOLT %.9g", next)); e != nil {
-			return e
-		}
-		if e = c.opc(); e != nil {
-			return e
-		}
-		if e = c.errors(); e != nil {
-			return e
-		}
-		if e = c.compare("VOLT?", next); e != nil {
-			return e
-		}
-		c.esrCommand = next
-		c.log(fmt.Sprintf("SOFTWARE ESR %.6g mOhm: I=%.6g A target=%.6g V command=%.6g V", p.ESRMilliohm, r.Current, target, next))
-	}
-	command := c.esrCommand
-	r.ESRTarget = &target
-	r.ESRCommand = &command
-	return nil
+	return c.verifyPS2Q(p)
 }
 
 type DiagnosticItem struct {

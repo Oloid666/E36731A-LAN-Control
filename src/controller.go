@@ -31,8 +31,6 @@ type Reading struct {
 	Current      float64  `json:"current"`
 	Power        float64  `json:"power"`
 	Resistance   *float64 `json:"resistance"`
-	ESRTarget    *float64 `json:"esr_target_voltage"`
-	ESRCommand   *float64 `json:"esr_command_voltage"`
 	SampleMS     float64  `json:"sample_ms"`
 	Output       bool     `json:"output"`
 	Actual       string   `json:"actual"`
@@ -75,14 +73,13 @@ type Controller struct {
 	busy            atomic.Bool
 	dirty           bool
 	logWriter       io.Writer
-	esrCommand      float64
 	nextPoll        time.Time
 }
 
 func NewController() *Controller {
 	c := &Controller{dial: net.DialTimeout}
 	c.state.Message = "未連線；實機驗證尚未完成"
-	c.state.Version = "v0.3.2"
+	c.state.Version = "v0.4.0"
 	c.state.Options = DefaultOptions()
 	c.state.Preferences = DefaultPreferences()
 	c.heartbeat.Store(time.Now().UnixNano())
@@ -109,8 +106,11 @@ func (p Config) validate() error {
 	if p.Role != "source" && p.Role != "sink" && p.Role != "battery" {
 		return errors.New("Role 必須為 source、sink 或 battery")
 	}
-	if (p.Role == "battery" && p.Mode != "ESR") || (p.Role != "battery" && p.Mode != "CV" && p.Mode != "CC" && !(p.Role == "sink" && p.Mode == "CR")) {
-		return errors.New("Source 支援 CC/CV；Sink 支援 CC/CV/CR；Battery 僅支援 ESR")
+	if (p.Role == "battery" && p.Mode != "CV") || (p.Role != "battery" && p.Mode != "CV" && p.Mode != "CC" && !(p.Role == "sink" && p.Mode == "CR")) {
+		return errors.New("Source 支援 CC/CV；Sink 支援 CC/CV/CR；Battery 僅支援 PS2Q CV（未設定 ESR）")
+	}
+	if p.ESRMilliohm != 0 {
+		return errors.New("原生硬體 ESR 介面尚未確認，不能套用 ESR；低速軟體模擬已移除。ESR=0 僅代表不請求設定內阻，不代表儀器實際內阻為零")
 	}
 	for _, v := range []float64{p.Voltage, p.Current, p.OVP, p.Resistance, p.ESRMilliohm, p.MinVoltage, p.MaxVoltage} {
 		if math.IsNaN(v) || math.IsInf(v, 0) {
@@ -139,14 +139,11 @@ func (p Config) validate() error {
 		if p.Current < 0.01 {
 			return errors.New("PS2Q 電流設定最低 0.01 A")
 		}
-		if p.ESRMilliohm < 0 || p.ESRMilliohm > 1000 {
-			return errors.New("軟體 ESR 範圍 0–1000 mΩ")
-		}
 		if p.MinVoltage < 0 || p.MinVoltage >= p.MaxVoltage || p.MaxVoltage > 30 || p.Voltage < p.MinVoltage || p.Voltage > p.MaxVoltage || p.MaxVoltage >= p.OVP {
-			return errors.New("ESR 必須符合 0≤下限≤Voc≤上限≤30 V，且上限<OVP")
+			return errors.New("PS2Q 必須符合 0≤下限≤Voc≤上限≤30 V，且上限<OVP")
 		}
 		if p.MaxVoltage*p.Current > 200 {
-			return errors.New("ESR 上限電壓×電流超過 200 W")
+			return errors.New("PS2Q 上限電壓×電流超過 200 W")
 		}
 	}
 	if (p.Role == "source" || p.Role == "battery" || p.Mode == "CV") && p.Voltage*p.Current > 200 {
@@ -372,7 +369,6 @@ func (c *Controller) apply(p Config) error {
 		commands = append(commands, "INIT:CONT:TRAN OFF", "ABOR:TRAN", "VOLT:MODE FIX", "CURR:MODE FIX", "OUTP:DEL:RISE 0", "OUTP:DEL:FALL 0")
 	}
 	if p.Role == "battery" {
-		c.esrCommand = p.Voltage
 		commands = append(commands, fmt.Sprintf("VOLT:PROT %.9g", p.OVP), "VOLT:PROT:STAT ON", fmt.Sprintf("CURR %.9g", p.Current), fmt.Sprintf("VOLT %.9g", p.Voltage))
 	} else if p.Role == "source" {
 		preferred := "VOLT"
@@ -442,7 +438,7 @@ func (c *Controller) verify(p Config) error {
 		return errors.New("操作模式讀回不符")
 	}
 	if p.Role == "battery" {
-		return c.verifyESR(p)
+		return c.verifyPS2Q(p)
 	}
 	if p.Role == "source" {
 		for _, v := range []struct {
@@ -558,7 +554,7 @@ func (c *Controller) on(expected Config) error {
 			return e
 		}
 		if v > expected.MaxVoltage+.01 || v < -.01 {
-			return errors.New("ESR ON 前外部電壓超出允許範圍")
+			return errors.New("PS2Q ON 前外部電壓超出允許範圍")
 		}
 	}
 	if e := c.write("OUTP ON"); e != nil {
@@ -718,7 +714,7 @@ func (c *Controller) sample() error {
 		}
 	}
 	if r.Output && c.state.Config != nil && c.state.Config.Role == "battery" {
-		if e = c.feedbackESR(&r); e != nil {
+		if e = c.monitorPS2Q(&r); e != nil {
 			return e
 		}
 	}
