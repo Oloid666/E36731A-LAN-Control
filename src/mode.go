@@ -29,7 +29,7 @@ func (c *Controller) switchMode(target string) error {
 		until := time.Now().Add(500 * time.Millisecond)
 		for time.Now().Before(until) {
 			if c.generation.Load() != c.ticket {
-				return fmt.Errorf("模式切換已被 OFF 要求取消；請重新連線確認 OFF")
+				return fmt.Errorf("模式切換取消：%w", errCancelled)
 			}
 			if time.Now().After(c.deadline) {
 				break

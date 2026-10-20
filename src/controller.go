@@ -38,6 +38,7 @@ type Reading struct {
 	Questionable int      `json:"questionable"`
 }
 type State struct {
+	Operation    string            `json:"operation"`
 	DebugOnly    bool              `json:"debug_only"`
 	Preferences  Preferences       `json:"preferences"`
 	Connected    bool              `json:"connected"`
@@ -60,6 +61,7 @@ type State struct {
 	Diagnostics  []DiagnosticItem  `json:"diagnostics"`
 }
 type Controller struct {
+	snapshot        atomic.Pointer[State]
 	preferencesPath string
 	mu              sync.Mutex
 	conn            net.Conn
@@ -71,6 +73,7 @@ type Controller struct {
 	deadline        time.Time
 	heartbeat       atomic.Int64
 	busy            atomic.Bool
+	emergencies     atomic.Int64
 	dirty           bool
 	logWriter       io.Writer
 	nextPoll        time.Time
@@ -79,12 +82,38 @@ type Controller struct {
 func NewController() *Controller {
 	c := &Controller{dial: net.DialTimeout}
 	c.state.Message = "未連線；實機驗證尚未完成"
-	c.state.Version = "v0.4.0"
+	c.state.Version = "v0.5.0"
 	c.state.Options = DefaultOptions()
 	c.state.Preferences = DefaultPreferences()
 	c.heartbeat.Store(time.Now().UnixNano())
+	c.publish()
 	return c
 }
+
+// Every published state owns its mutable slices and pointers, so HTTP readers
+// can render progress while the SCPI mutex remains held by a slow instrument.
+func (c *Controller) publish() {
+	s := c.state
+	s.Logs = append([]string(nil), s.Logs...)
+	s.History = append([]Reading(nil), s.History...)
+	s.Diagnostics = append([]DiagnosticItem(nil), s.Diagnostics...)
+	if s.Reading != nil {
+		r := *s.Reading
+		s.Reading = &r
+	}
+	if s.Config != nil {
+		p := *s.Config
+		s.Config = &p
+	}
+	c.snapshot.Store(&s)
+}
+func (c *Controller) progress(message string) {
+	c.state.Operation = message
+	c.log("STEP " + message)
+}
+
+var errCancelled = errors.New("操作已被 OFF 要求取消")
+
 func (c *Controller) log(s string) {
 	line := time.Now().Format("15:04:05.000 ") + s
 	c.state.Logs = append(c.state.Logs, line)
@@ -94,6 +123,7 @@ func (c *Controller) log(s string) {
 	if len(c.state.Logs) > 2000 {
 		c.state.Logs = c.state.Logs[len(c.state.Logs)-2000:]
 	}
+	c.publish()
 }
 func validIP(value string) error {
 	ip := net.ParseIP(value)
@@ -160,7 +190,7 @@ func (c *Controller) ready() error {
 		return errors.New("尚未連線")
 	}
 	if c.generation.Load() != c.ticket {
-		return errors.New("操作已被 OFF 要求取消")
+		return errCancelled
 	}
 	if time.Now().After(c.deadline) {
 		return errors.New("本次操作逾時")
@@ -574,7 +604,6 @@ func (c *Controller) on(expected Config) error {
 	return c.sample()
 }
 func (c *Controller) off() error {
-	c.state.Config = nil
 	if c.conn == nil {
 		if c.state.Unknown {
 			return errors.New("未連線，無法確認 OFF；請檢查實機面板")
@@ -592,7 +621,12 @@ func (c *Controller) off() error {
 		return errors.New("儀器仍回報 ON")
 	}
 	c.state.Unknown = false
-	c.state.Message = "儀器已確認 OFF；重新 ON 前請套用設定"
+	c.state.Error = ""
+	if c.state.Config != nil {
+		c.state.Message = "儀器已確認 OFF；設定未變更時可再按 ON，開啟前仍會讀回驗證"
+	} else {
+		c.state.Message = "儀器已確認 OFF；按一鍵套用完成後可 ON"
+	}
 	if c.state.Reading != nil {
 		c.state.Reading.Output = false
 		c.state.Reading.Actual = "OFF"
@@ -613,6 +647,7 @@ func (c *Controller) disconnect() error {
 	c.conn = nil
 	c.reader = nil
 	c.state.Connected = false
+	c.state.Config = nil
 	c.state.Reading = nil
 	c.state.Message = "已確認 OFF 並斷線"
 	return nil
@@ -731,6 +766,10 @@ func (c *Controller) poll() {
 	defer ticker.Stop()
 	for range ticker.C {
 		c.mu.Lock()
+		if c.busy.Load() || c.emergencies.Load() > 0 {
+			c.mu.Unlock()
+			continue
+		}
 		if c.conn != nil {
 			c.begin()
 			var e error
@@ -744,9 +783,16 @@ func (c *Controller) poll() {
 				c.nextPoll = time.Now().Add(time.Duration(c.state.Options.PollMS) * time.Millisecond)
 			}
 			if e != nil {
-				c.fail(e)
+				if errors.Is(e, errCancelled) && !c.dirty {
+					// The queued OFF handler owns the cancellation. Do not turn
+					// a completed, aligned query into a transport failure.
+					c.log("CANCEL 輪詢讓出通訊，等待 OFF")
+				} else {
+					c.fail(e)
+				}
 			}
 		}
+		c.publish()
 		c.mu.Unlock()
 	}
 }

@@ -229,8 +229,8 @@ func TestPS2QNoMonitoringAfterOff(t *testing.T) {
 	if e := c.sample(); e != nil {
 		t.Fatal(e)
 	}
-	if c.state.Config != nil {
-		t.Fatal("PS2Q remained armed")
+	if c.state.Config == nil || c.state.Reading.Output {
+		t.Fatal("OFF should retain verified settings without enabling output")
 	}
 	if has(f, "OUTP ON") {
 		t.Fatal("unexpected ON")
@@ -293,7 +293,7 @@ func TestDebugExportOmitsSessionSecret(t *testing.T) {
 		t.Fatal(w.Code)
 	}
 	var value State
-	if json.Unmarshal(w.Body.Bytes(), &value) != nil || value.Version != "v0.4.0" {
+	if json.Unmarshal(w.Body.Bytes(), &value) != nil || value.Version != "v0.5.0" {
 		t.Fatal("export missing version")
 	}
 }

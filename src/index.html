@@ -1,25 +1,33 @@
 <!doctype html>
-<html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>E36731A · LAN Control v0.4.0</title><style>
-:root{color-scheme:dark;--bg:#101419;--panel:#181f27;--line:#303b46;--muted:#96a6b5;--green:#b1eb8b;--blue:#6ac9dc}*{box-sizing:border-box}body{margin:0;background:var(--bg);color:#e7eef4;font:14px "Segoe UI","Microsoft JhengHei",sans-serif}button,input,select{font:inherit}button{cursor:pointer}button:disabled{opacity:.35;cursor:default}main{max-width:1160px;margin:auto;padding:25px}header{display:flex;justify-content:space-between;gap:15px;align-items:center;border-bottom:1px solid var(--line);padding-bottom:22px}h1{margin:0;font-size:25px;font-weight:650}h1 span{color:var(--green);margin-right:12px}p{color:var(--muted);line-height:1.7;margin:8px 0 0}.tag{border:1px solid #607746;color:var(--green);font-size:11px;border-radius:4px;padding:7px 10px;white-space:nowrap}.connection{display:flex;align-items:end;gap:12px;margin:23px 0}label{display:block;color:var(--muted);font-size:12px;margin-bottom:8px}.connection>div:first-child{flex:1}input,select{width:100%;background:#10161d;color:#e7eef4;border:1px solid #3a4754;border-radius:5px;padding:11px 12px}input:focus,select:focus{outline:1px solid var(--green)}.button{border:1px solid #3a4754;background:#26313c;color:#e8f0f5;padding:11px 17px;border-radius:5px}.button.primary{background:var(--green);color:#1b3018;border-color:var(--green);font-weight:650}.button.off{border-color:#ac6e58;color:#ffc2aa;background:#442c25}.status{border:1px solid var(--line);border-radius:6px;padding:12px 15px;display:flex;gap:12px;align-items:start;background:#151c23;line-height:1.7;overflow-wrap:anywhere}.light{width:8px;height:8px;background:#677784;border-radius:50%;flex-shrink:0;margin-top:7px}.status.bad{border-color:#b96c60;color:#ffbdae}.status.good .light{background:var(--green)}.identity{font:11px Consolas,monospace;color:var(--muted);margin:8px 0 22px;min-height:15px}.metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}.card{background:var(--panel);border:1px solid var(--line);border-radius:7px;padding:20px}.value{font:32px Consolas,monospace;margin-top:16px;color:var(--green)}.value.blue{color:var(--blue)}.value small{font-size:15px;color:var(--muted);margin-left:6px}.subvalue{font-size:11px;color:var(--muted);margin-top:10px}.layout{display:grid;grid-template-columns:1fr 1.2fr;gap:18px;margin-top:18px}.panel{background:var(--panel);border:1px solid var(--line);border-radius:7px}.head{padding:18px 20px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center}h2{margin:0;font-size:14px}.content{padding:20px}.twocol{display:grid;grid-template-columns:1fr 1fr;gap:15px}.field{margin-bottom:17px}.hint{font-size:12px;line-height:1.7;color:var(--muted);background:#111922;padding:12px;border-radius:5px;margin:0 0 17px}.actions{display:flex;gap:12px;margin-top:16px}.actions button{flex:1}.small{font-size:11px;color:var(--muted)}canvas{width:100%;height:240px;display:block}.legend{font-size:11px;padding:16px 20px;color:var(--muted);display:flex;gap:20px}.logs{margin-top:18px}.logs pre{height:150px;overflow:auto;padding:0 20px;white-space:pre-wrap;overflow-wrap:anywhere;color:#9eafbc;font:11px/1.7 Consolas,monospace}footer{display:flex;justify-content:space-between;gap:15px;color:var(--muted);font-size:11px;margin-top:20px;align-items:center}.linkbutton{background:none;border:0;color:#c2cbd2;text-decoration:underline;cursor:pointer}.notice{color:#b6c3cd;font-size:12px;line-height:1.8;margin-top:18px}#localerror{color:#ffb9a4;white-space:pre-line;margin:14px 0}.pill{color:var(--green);font-size:11px}.hidden{display:none}@media(max-width:750px){main{padding:18px}.layout{grid-template-columns:1fr}.metrics{grid-template-columns:1fr 1fr}.connection{flex-wrap:wrap}.connection>div:first-child{flex-basis:100%}.value{font-size:28px}header{align-items:flex-start}h1{font-size:22px}footer{flex-wrap:wrap}}
+<html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>E36731A · LAN Control v0.5.0</title><style>
+:root{color-scheme:dark;--bg:#101419;--panel:#181f27;--line:#303b46;--muted:#96a6b5;--green:#b1eb8b;--blue:#6ac9dc}*{box-sizing:border-box}body{margin:0;background:var(--bg);color:#e7eef4;font:14px "Segoe UI","Microsoft JhengHei",sans-serif}button,input,select{font:inherit}button{cursor:pointer}button:disabled{opacity:.35;cursor:default}main{max-width:1160px;margin:auto;padding:25px}header{display:flex;justify-content:space-between;gap:15px;align-items:center;border-bottom:1px solid var(--line);padding-bottom:22px}h1{margin:0;font-size:25px;font-weight:650}h1 span{color:var(--green);margin-right:12px}p{color:var(--muted);line-height:1.7;margin:8px 0 0}.tag{border:1px solid #607746;color:var(--green);font-size:11px;border-radius:4px;padding:7px 10px;white-space:nowrap}.connection{display:flex;align-items:end;gap:12px;margin:23px 0}label{display:block;color:var(--muted);font-size:12px;margin-bottom:8px}.connection>div:first-child{flex:1}input,select{width:100%;background:#10161d;color:#e7eef4;border:1px solid #3a4754;border-radius:5px;padding:11px 12px}input:focus,select:focus{outline:1px solid var(--green)}.button{border:1px solid #3a4754;background:#26313c;color:#e8f0f5;padding:11px 17px;border-radius:5px}.button.primary{background:var(--green);color:#1b3018;border-color:var(--green);font-weight:650}.button.off{border-color:#ac6e58;color:#ffc2aa;background:#442c25}.status{border:1px solid var(--line);border-radius:6px;padding:12px 15px;display:flex;gap:12px;align-items:start;background:#151c23;line-height:1.7;overflow-wrap:anywhere}.light{width:8px;height:8px;background:#677784;border-radius:50%;flex-shrink:0;margin-top:7px}.status.bad{border-color:#b96c60;color:#ffbdae}.status.good .light{background:var(--green)}.identity{font:11px Consolas,monospace;color:var(--muted);margin:8px 0 22px;min-height:15px}.metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}.card{background:var(--panel);border:1px solid var(--line);border-radius:7px;padding:20px}.value{font:32px Consolas,monospace;margin-top:16px;color:var(--green)}.value.blue{color:var(--blue)}.value small{font-size:15px;color:var(--muted);margin-left:6px}.subvalue{font-size:11px;color:var(--muted);margin-top:10px}.layout{display:grid;grid-template-columns:1fr 1.2fr;gap:18px;margin-top:18px}.panel{background:var(--panel);border:1px solid var(--line);border-radius:7px}.head{padding:18px 20px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center}.head{gap:10px;flex-wrap:wrap}h2{margin:0;font-size:14px}.content{padding:20px}.twocol{display:grid;grid-template-columns:1fr 1fr;gap:15px}.field{margin-bottom:17px}.hint{font-size:12px;line-height:1.7;color:var(--muted);background:#111922;padding:12px;border-radius:5px;margin:0 0 17px}.actions{display:flex;flex-wrap:wrap;gap:12px;margin-top:16px}.actions button{flex:1;min-width:120px}.small{font-size:11px;color:var(--muted)}canvas{width:100%;height:240px;display:block}.legend{font-size:11px;padding:16px 20px;color:var(--muted);display:flex;gap:20px}.logs{margin-top:18px}.logs pre{height:150px;overflow:auto;padding:0 20px;white-space:pre-wrap;overflow-wrap:anywhere;color:#9eafbc;font:11px/1.7 Consolas,monospace}footer{display:flex;justify-content:space-between;gap:15px;color:var(--muted);font-size:11px;margin-top:20px;align-items:center}.linkbutton{background:none;border:0;color:#c2cbd2;text-decoration:underline;cursor:pointer}.notice{color:#b6c3cd;font-size:12px;line-height:1.8;margin-top:18px}#localerror{color:#ffb9a4;white-space:pre-line;margin:14px 0}.pill{color:var(--green);font-size:11px}.hidden{display:none}@media(max-width:750px){main{padding:18px}.layout{grid-template-columns:1fr}.metrics{grid-template-columns:1fr 1fr}.connection{flex-wrap:wrap}.connection>div:first-child{flex-basis:100%}.value{font-size:28px}header{align-items:flex-start}h1{font-size:22px}footer{flex-wrap:wrap}}
 .presets{display:flex;flex-wrap:wrap;gap:7px;margin-top:9px}.presets button{flex:1;min-width:82px;padding:9px 7px;background:#202b35;color:#dce6ee;border:1px solid #435362;border-radius:5px;font-size:12px;line-height:1.5}.presets button[aria-pressed="true"]{border-color:var(--green);color:var(--green);background:#25352b}.presets small{display:block;font-size:10px;color:var(--muted)}</style></head><body><main>
-<header><div><h1><span>ϟ</span>E36731A · LAN Control</h1><p>PS2Q 雙向 / Source / Sink · 實機操作介面</p></div><span class="tag">v0.4.0 · 本機執行</span></header>
-<div class="connection"><div><label for="ip">儀器 LAN IPv4 位址</label><input id="ip" value="169.254.30.1" placeholder="169.254.30.1" inputmode="decimal" autocomplete="off"></div><button class="button primary" id="connect">連線</button><button class="button" id="connect_debug">診斷連線</button><button class="button" id="disconnect" disabled>OFF 並斷線</button></div>
-<div id="status" class="status"><i class="light"></i><span id="message" role="status">正在連接本機通訊程式…</span></div><div id="baseline" class="notice hidden" role="status"></div><div id="identity" class="identity">TCP 5025 · 不需要 VISA 或 Python</div>
-<div class="metrics"><div class="card"><label>實測電壓</label><div class="value"><span id="voltage">—</span><small>V</small></div></div><div class="card"><label>實測電流</label><div class="value blue"><span id="current">—</span><small>A</small></div></div><div class="card"><label>計算功率 V × I</label><div class="value"><span id="power">—</span><small>W</small></div></div><div class="card"><label>實際調節狀態</label><div class="value" id="actual">—</div><div class="subvalue" id="output">輸出狀態未知</div></div></div>
-<div class="layout"><section class="panel"><div class="head"><h2>控制設定</h2><span class="pill" id="verified">尚未驗證</span></div><div class="content"><form id="config"><div class="twocol"><div class="field"><label for="role">方向</label><select id="role"><option value="source">Source · 電源輸出</option><option value="sink">Sink · 電子負載</option><option value="battery">Battery · 原廠 PS2Q 雙向 CV</option></select></div><div class="field"><label for="mode" id="modeLabel">CC / CV 轉換偏好</label><select id="mode"><option value="CV">CV · 定電壓</option><option value="CC">CC · 定電流</option><option value="CR" id="croption">CR · 定電阻</option></select></div></div><div class="hint" id="modehint"></div><div class="field"><label>鋰離子電池快速設定 · 3.7 V／節，滿電 4.2 V／節</label><div class="presets" role="group" aria-label="電池串數快速設定"><button type="button" id="preset-battery-1" aria-pressed="false">1S · 3.7 V<small>滿電 4.2 V</small></button><button type="button" id="preset-battery-2" aria-pressed="false">2S · 7.4 V<small>滿電 8.4 V</small></button><button type="button" id="preset-battery-3" aria-pressed="false">3S · 11.1 V<small>滿電 12.6 V</small></button><button type="button" id="preset-battery-4" aria-pressed="false">4S · 14.8 V<small>滿電 16.8 V</small></button></div><p class="small">同時帶入設定電壓、下限 3.5 V／節、上限 4.2 V／節及 OVP 4.3 V／節。非磷酸鐵鋰／高壓鋰電池預設，請依測試條件調整。</p></div><p class="hint" id="presetnote" role="status">快速鍵只帶入表單；確認 OFF 後再套用，不會自動 ON。</p><div class="twocol"><div class="field"><label for="setv" id="vlabel">電壓設定 / V</label><input id="setv" type="number" min="0" max="30" step="0.001" value="3.7" required></div><div class="field"><label for="seti" id="ilabel">電流限制 / A</label><input id="seti" type="number" min="0.001" max="20" step="0.001" value="0.1" required><div class="presets" role="group" aria-label="Io 電流快速設定"><button type="button" id="preset-io-1" aria-pressed="false">Io 1 A</button><button type="button" id="preset-io-2" aria-pressed="false">Io 2 A</button><button type="button" id="preset-io-4" aria-pressed="false">Io 4 A</button><button type="button" id="preset-io-8" aria-pressed="false">Io 8 A</button></div></div></div><div class="field hidden" id="resfield"><label for="setr">CR 電子負載阻值 / Ω（0.08–4000）</label><input id="setr" type="number" min="0.08" max="4000" step="0.01" value="100"><p class="small" id="resreadback">儀器 CR 設定阻值：—</p></div><div class="field" id="ovpfield"><label for="ovp">過壓保護 OVP / V</label><input id="ovp" type="number" min="0.001" max="33" step="0.001" value="4.3"></div><div class="hidden" id="esrfields"><div class="field"><label for="esr">硬體 ESR / mΩ · 尚未可用</label><input id="esr" type="text" value="尚未設定" disabled><div class="presets" role="group" aria-label="ESR 尚未可用"><button type="button" id="preset-esr-0" aria-pressed="false" disabled>0 mΩ</button><button type="button" id="preset-esr-10" aria-pressed="false" disabled>10 mΩ</button><button type="button" id="preset-esr-100" aria-pressed="false" disabled>100 mΩ</button></div><p class="small">原生 ESR 設定／讀回介面尚未確認。上述按鈕停用；不會設定零內阻，也不會以軟體調壓模擬。</p></div><div class="twocol"><div class="field"><label for="minv">端電壓軟體監控下限 / V</label><input id="minv" type="number" min="0" max="30" step="0.001" value="3.5"></div><div class="field"><label for="maxv">端電壓軟體監控上限 / V</label><input id="maxv" type="number" min="0" max="30" step="0.001" value="4.2"></div></div><div class="hint">使用原廠 EMUL PS2Q，確認模式及 OFF 後設定固定電壓／電流值。Source／Sink 由儀器處理，電腦不依量測電流改變電壓。CURR 設定不代表已確認獨立硬體 Sink 限流；雙向軟體超流／電壓監控不能取代硬體保護。首次必須以低功率配置確認雙向與電流符號。</div><p id="esrlive" class="small">硬體 ESR 未設定；本版已移除軟體 ESR。</p></div><button class="button" id="apply" type="submit" style="width:100%" disabled>套用並讀回驗證</button></form><div class="actions"><button class="button primary" id="on" disabled>輸出 ON</button><button class="button off" id="off" disabled>輸出 OFF</button></div><div id="localerror" role="alert"></div><p class="small">切換 Source / Sink / Battery 會重設儀器設定。修改參數前請先 OFF。預填值不代表適合你的 DUT。</p></div></section>
-<section class="panel"><div class="head"><h2>實測趨勢</h2><button class="button" id="export" style="font-size:11px;padding:5px 10px">↓ CSV</button></div><div class="legend"><span style="color:var(--green)">━ 電壓 V（左軸）</span><span style="color:var(--blue)">━ 電流 A（右軸）</span></div><canvas id="chart" aria-label="實測電壓與電流趨勢"></canvas><div class="content"><p class="small" id="updated">尚無實測資料</p><p class="notice">量測由儀器回傳；V、I 依序讀取，功率以 V × I 計算，不等同儀器平均功率；並非同步高速取樣。曲線與匯出保留最近 120 筆。</p><p class="notice">本程式採 30 V / 20 A / 200 W 的應用限制。Sink 的超限停止屬於軟體輪詢，不能取代硬體保護。</p></div></section></div>
-<section class="panel logs"><div class="head"><h2>除錯與設定</h2><span class="small" id="timing">尚無查詢</span></div><div class="content"><div class="twocol"><div class="field"><label for="timeout">通訊逾時（連線前設定）</label><select id="timeout"><option value="2000">2 秒</option><option value="5000" selected>5 秒</option><option value="10000">10 秒</option></select></div><div class="field"><label for="pollms">每輪結束後的間隔（非固定取樣頻率）</label><select id="pollms"><option value="1000">1 秒</option><option value="2000">2 秒</option><option value="5000">5 秒</option></select></div></div><div class="actions"><button class="button" id="save">儲存設定</button><button class="button" id="diagnose">執行唯讀診斷</button><button class="button" id="debugExport">匯出除錯 JSON</button></div><p class="small">儲存設定不會套用至實機。診斷須先 OFF；診斷連線不輪詢，也禁止設定與 ON。除錯檔包含儀器識別、IP、參數、指令與回覆，不包含本機工作階段密鑰。</p><pre id="diagnostics" style="height:auto;max-height:180px;padding:0"></pre><p class="small" id="failure"></p></div></section><section class="panel logs"><div class="head"><h2>SCPI 通訊紀錄</h2><button class="button" type="button" id="copyRecent">複製最後一段（80 行）</button></div><pre id="logs">尚未連線。</pre><div class="content"><p class="small" id="copyStatus" role="status">複製目前畫面最近 80 行；失聯後仍可複製已收到的紀錄。</p><div id="copyFallback" class="hidden"><label for="copyText">剪貼簿無法使用，請按 Ctrl+C 複製下方已選取內容</label><textarea id="copyText" readonly rows="8" style="width:100%;background:#10161d;color:#e7eef4"></textarea></div></div></section>
-<footer><span>v0.4.0 免安裝本機版 · 原廠 PS2Q 控制尚待實機驗證；硬體 ESR 未整合</span><button class="linkbutton" id="quit">OFF 並結束程式</button></footer><p class="small" style="margin-top:12px">網頁超過 10 秒未回報時，通訊程式會嘗試 OFF 並斷線。強制結束 EXE、斷網或關機時無法保證 OFF；軟體 OFF 不代表物理隔離。</p>
+<header><div><h1><span>ϟ</span>E36731A · 電池模擬</h1><p>預設 PS2Q 雙向定電壓 · 開啟頁面自動連線</p></div><span class="tag">v0.5.0 · 本機執行</span></header>
+<div class="connection"><div><label for="ip">儀器 IP</label><input id="ip" value="169.254.30.1" inputmode="decimal" autocomplete="off"></div><button class="button" id="connect">連線／重試</button></div>
+<div id="status" class="status"><i class="light"></i><span id="message" role="status">正在啟動本機控制程式…</span></div><div id="worknote" class="hint hidden" role="status"></div><div id="baseline" class="notice hidden" role="status"></div><div id="identity" class="identity">TCP 5025 · 不需要 VISA 或 Python</div>
+<div class="metrics"><div class="card"><label>實測電壓</label><div class="value"><span id="voltage">—</span><small>V</small></div></div><div class="card"><label>實測電流</label><div class="value blue"><span id="current">—</span><small>A</small></div></div><div class="card"><label>計算功率 V × I</label><div class="value"><span id="power">—</span><small>W</small></div></div><div class="card"><label>儀器實際模式</label><div class="value" id="actual">—</div><div class="subvalue" id="output">輸出狀態未知</div></div></div>
+<div class="layout"><section class="panel"><div class="head"><h2 id="draftmode">電池設定 · PS2Q</h2><span class="pill" id="verified">尚未套用</span></div><div class="content"><form id="config">
+<div class="field"><label>電池串數 · 每節設定 3.7 V／滿電 4.2 V</label><div class="presets" role="group" aria-label="電池串數快速設定"><button type="button" id="preset-battery-1">1S · 3.7 V<small>滿電 4.2 V</small></button><button type="button" id="preset-battery-2">2S · 7.4 V<small>滿電 8.4 V</small></button><button type="button" id="preset-battery-3">3S · 11.1 V<small>滿電 12.6 V</small></button><button type="button" id="preset-battery-4">4S · 14.8 V<small>滿電 16.8 V</small></button></div></div>
+<div class="twocol"><div class="field"><label for="setv" id="vlabel">電池電壓 / V</label><input id="setv" type="number" min="0" max="30" step="0.001" value="3.7" required><div class="presets"><button type="button" id="vdown">V −</button><button type="button" id="vup">V ＋</button></div><label for="vstep" style="margin-top:8px">每次調整</label><select id="vstep"><option value="0.001">1 mV</option><option value="0.01">10 mV</option><option value="0.1" selected>100 mV</option></select></div><div class="field"><label for="seti" id="ilabel">Io 電流設定 / A</label><input id="seti" type="number" min="0.01" max="20" step="0.001" value="0.1" required><div class="presets" role="group" aria-label="Io 電流快速設定"><button type="button" id="preset-io-1">1 A</button><button type="button" id="preset-io-2">2 A</button><button type="button" id="preset-io-4">4 A</button><button type="button" id="preset-io-8">8 A</button></div></div></div>
+<p class="small" id="presetnote" role="status">快速鍵與 V ＋／− 只改表單，按下方一鍵套用才會送到儀器。</p>
+<button class="button primary" id="apply" type="submit" style="width:100%;margin-top:16px">一鍵套用電池設定</button><p class="small">自動連線 → 確認 OFF → 套用模式／參數 → 讀回驗證。完成後維持 OFF，不會自動 ON。</p>
+<details style="margin-top:20px"><summary>保護與進階模式</summary><div style="margin-top:16px"><div class="twocol"><div class="field"><label for="role">操作模式</label><select id="role"><option value="battery" selected>電池 · PS2Q 雙向 CV</option><option value="source">Source · 單向電源</option><option value="sink">Sink · 電子負載</option></select></div><div class="field"><label for="mode" id="modeLabel">調節模式</label><select id="mode"><option value="CV">CV · 定電壓</option><option value="CC">CC · 定電流</option><option value="CR" id="croption">CR · 定電阻</option></select></div></div><div class="hint" id="modehint"></div>
+<div class="field hidden" id="resfield"><label for="setr">CR 電子負載阻值 / Ω</label><input id="setr" type="number" min="0.08" max="4000" step="0.01" value="100"><p class="small" id="resreadback">儀器 CR 設定阻值：—</p></div><div class="field" id="ovpfield"><label for="ovp">OVP 過壓保護 / V</label><input id="ovp" type="number" min="0.001" max="33" step="0.001" value="4.3"></div>
+<div id="esrfields"><div class="twocol"><div class="field"><label for="minv">端電壓軟體監控下限 / V</label><input id="minv" type="number" min="0" max="30" step="0.001" value="3.5"></div><div class="field"><label for="maxv">端電壓軟體監控上限 / V</label><input id="maxv" type="number" min="0" max="30" step="0.001" value="4.2"></div></div><label for="esr">硬體 ESR · 尚未整合</label><input id="esr" value="尚未設定" disabled><div class="presets"><button type="button" id="preset-esr-0" disabled>0 mΩ</button><button type="button" id="preset-esr-10" disabled>10 mΩ</button><button type="button" id="preset-esr-100" disabled>100 mΩ</button></div><p class="small" id="esrlive">硬體 ESR 未設定，不使用軟體回授替代。</p><p class="small">CURR 不代表已驗證獨立硬體 Sink 限流。雙向電流與電壓監控為低速軟體停止機制，不能取代硬體保護。首次請以低功率配置確認方向與限流。</p></div></div></details></form>
+<div class="actions"><button class="button primary" id="on" disabled>輸出 ON</button><button class="button off" id="off">輸出 OFF／取消</button></div><p class="small" id="onreason">先按一鍵套用，完成後才能 ON。</p><div id="localerror" role="alert"></div></div></section>
+<section class="panel"><div class="head"><h2>實測趨勢</h2><button class="button" id="export" style="font-size:11px;padding:5px 10px">↓ CSV</button></div><div class="legend"><span style="color:var(--green)">━ 電壓 V（左軸）</span><span style="color:var(--blue)">━ 電流 A（右軸）</span></div><canvas id="chart" aria-label="實測電壓與電流趨勢"></canvas><div class="content"><p class="small" id="updated">尚無實測資料</p><p class="notice">量測由儀器回傳；V、I 依序讀取，功率以 V × I 計算，不等同儀器平均功率；並非同步高速取樣。曲線與匯出保留最近 120 筆；設定操作中量測暫停。</p><p class="notice">本程式採 30 V / 20 A / 200 W 的應用限制。Sink 的超限停止屬於軟體輪詢，不能取代硬體保護。</p></div></section></div>
+<details class="panel logs"><summary style="padding:18px 20px">連線進階／除錯</summary><div class="head"><h2>除錯與設定</h2><span class="small" id="timing">尚無查詢</span></div><div class="content"><div class="twocol"><div class="field"><label for="timeout">通訊逾時（連線前設定）</label><select id="timeout"><option value="2000">2 秒</option><option value="5000" selected>5 秒</option><option value="10000">10 秒</option></select></div><div class="field"><label for="pollms">每輪結束後的間隔（非固定取樣頻率）</label><select id="pollms"><option value="1000">1 秒</option><option value="2000">2 秒</option><option value="5000">5 秒</option></select></div></div><div class="actions"><button class="button" id="connect_debug">唯讀診斷連線</button><button class="button" id="disconnect">OFF 並斷線</button></div><div class="actions"><button class="button" id="save">儲存設定</button><button class="button" id="diagnose">執行唯讀診斷</button><button class="button" id="debugExport">匯出除錯 JSON</button></div><p class="small">儲存設定不會套用至實機。診斷須先 OFF；診斷連線不輪詢，也禁止設定與 ON。除錯檔包含儀器識別、IP、參數、指令與回覆，不包含本機工作階段密鑰。</p><pre id="diagnostics" style="height:auto;max-height:180px;padding:0"></pre><p class="small" id="failure"></p></div></details><section class="panel logs"><div class="head"><h2>SCPI 通訊紀錄</h2><button class="button" type="button" id="copyRecent">複製最後一段（80 行）</button></div><pre id="logs">尚未連線。</pre><div class="content"><p class="small" id="copyStatus" role="status">複製目前畫面最近 80 行；失聯後仍可複製已收到的紀錄。</p><div id="copyFallback" class="hidden"><label for="copyText">剪貼簿無法使用，請按 Ctrl+C 複製下方已選取內容</label><textarea id="copyText" readonly rows="8" style="width:100%;background:#10161d;color:#e7eef4"></textarea></div></div></section>
+<footer><span>v0.5.0 免安裝本機版 · 原廠 PS2Q 控制尚待實機驗證；硬體 ESR 未整合</span><button class="linkbutton" id="quit">OFF 並結束程式</button></footer><p class="small" style="margin-top:12px">網頁超過 10 秒未回報時，通訊程式會嘗試 OFF 並斷線。強制結束 EXE、斷網或關機時無法保證 OFF；軟體 OFF 不代表物理隔離。</p>
 </main><script>
 const $ = id => document.getElementById(id);
 let token = location.hash.slice(1) || sessionStorage.getItem('e36731a-token') || '';
 if (token) {sessionStorage.setItem('e36731a-token',token);history.replaceState(null,'',location.pathname)}
-let state=null,working=false,stopped=false,polling=false,records=[],hydrated=false,edited=false;
+let state=null,working=false,stopped=false,polling=false,records=[],hydrated=false,edited=false,autoConnectAttempted=false,pendingActions=0,stopping=false,activeLabel="",operationStarted=0;
 const fields=['role','mode','setv','seti','ovp','setr','esr','minv','maxv'];
 const presetGroups={battery:[1,2,3,4],io:[1,2,4,8],esr:[0,10,100]};
 function presetBlocked(kind){
  const p=params();
- return stopped||working||!!state?.busy||!!state?.reading?.output||!!state?.debug_only||
+ return stopped||
   (kind==='battery'&&p.role==='sink')||(kind==='io'&&p.mode==='CR')||kind==='esr';
 }
 function choosePreset(kind,value){
@@ -66,37 +74,57 @@ function adjust(){
  controls();
 }
 function controls(){
- const connected=!!state?.connected,busy=working||!!state?.busy,on=!!state?.reading?.output,debug=!!state?.debug_only;
+ const connected=!!state?.connected,busy=working||!!state?.busy,on=!!state?.reading?.output,debug=!!state?.debug_only,verified=!!equal(params(),state?.config);
  for(const id of ['connect','connect_debug'])$(id).disabled=connected||busy||stopped;
- $('ip').disabled=connected||busy;$('disconnect').disabled=!connected||stopped;
- $('apply').disabled=!connected||busy||on||debug||stopped;
- $('on').disabled=!connected||busy||on||debug||!equal(params(),state?.config)||stopped;
- $('off').disabled=!connected||stopped;
- $('save').disabled=busy||stopped;
- $('diagnose').disabled=!connected||busy||on||stopped;
+ $('connect').textContent=connected?'已連線':'連線／重試';
+ $('ip').disabled=connected||busy||stopped;$('disconnect').disabled=(!connected&&!state?.unknown)||stopped||stopping;
+ $('apply').disabled=busy||stopped;
+ $('apply').textContent=busy?'處理中…可按 OFF 取消':$('role').value==='battery'?'一鍵套用電池設定':'一鍵連線並套用';
+ $('on').disabled=!connected||busy||on||debug||!verified||stopped;
+ $('off').disabled=stopped||stopping||(!connected&&!busy&&!state?.unknown);
+ $('off').textContent=stopping?'正在確認 OFF…':'輸出 OFF／取消';
+ $('save').disabled=busy||stopped;$('diagnose').disabled=!connected||busy||on||stopped;
  $('debugExport').disabled=stopped;
- $('verified').textContent=equal(params(),state?.config)?'設定已驗證':'尚未驗證';
- for(const id of fields)$(id).disabled=busy||stopped;
- $('setv').disabled=busy||stopped||($('role').value==='sink'&&$('mode').value!=='CV');
- $('seti').disabled=busy||stopped||$('mode').value==='CR';
- $('setr').disabled=busy||stopped||$('mode').value!=='CR';
- $('esr').disabled=true;
+ $('verified').textContent=verified?'設定已驗證':'尚未套用／表單已修改';
+ const draft=params();
+ $('presetnote').textContent=(draft.role==='sink'?(draft.mode==='CR'?'CR '+draft.resistance+' Ω':'Sink '+draft.mode+' · '+draft.current+' A'):'草稿 '+draft.voltage+' V · Io '+draft.current+' A · OVP '+draft.ovp+' V')+' · '+(verified?'已套用並讀回驗證。':'尚未套用；快速鍵只改表單。');
+ $('onreason').textContent=busy?'正在處理儀器；可編輯下一組設定，按 OFF 可取消。':!connected?'先按一鍵套用，會自動連線。':debug?'目前為唯讀診斷；按一鍵套用可切回控制。':on?'輸出 ON；編輯只改表單，按套用會先 OFF。':verified?'可按 ON；開啟前仍會再次讀回驗證。':'表單尚未套用，請按一鍵套用後再 ON。';
+ for(const id of fields)$(id).disabled=stopped;
+ $('setv').disabled=stopped||($('role').value==='sink'&&$('mode').value!=='CV');
+ $('seti').disabled=stopped||$('mode').value==='CR';$('setr').disabled=stopped||$('mode').value!=='CR';$('esr').disabled=true;
+ for(const id of ['vup','vdown','vstep'])$(id).disabled=$('setv').disabled;
  for(const id of ['timeout','pollms'])$(id).disabled=busy||connected||stopped;
+ $('draftmode').textContent=$('role').value==='battery'?'電池設定 · PS2Q 雙向 CV':$('role').value==='source'?'進階設定 · Source':'進階設定 · Sink';
  for(const [kind,values] of Object.entries(presetGroups))for(const v of values){
-  const button=$(`preset-${kind}-${v}`);
-  button.disabled=presetBlocked(kind);
-  const selected=kind==='battery'?Math.abs(+$('setv').value-3.7*v)<1e-6&&Math.abs(+$('minv').value-3.5*v)<1e-6&&Math.abs(+$('maxv').value-4.2*v)<1e-6&&Math.abs(+$('ovp').value-4.3*v)<1e-6:
-   +$(kind==='io'?'seti':'esr').value===v;
+  const button=$(`preset-${kind}-${v}`);button.disabled=presetBlocked(kind);
+  const selected=kind==='battery'?Math.abs(+$('setv').value-3.7*v)<1e-6&&Math.abs(+$('minv').value-3.5*v)<1e-6&&Math.abs(+$('maxv').value-4.2*v)<1e-6&&Math.abs(+$('ovp').value-4.3*v)<1e-6:+$('seti').value===v;
   button.setAttribute('aria-pressed',String(kind!=='esr'&&selected));
  }
+ $('worknote').classList.toggle('hidden',!busy);
+ if(busy)$('worknote').textContent=(state?.operation||activeLabel||'儀器處理中')+(state?.last_command?' · '+state.last_command:'')+(operationStarted?' · '+Math.floor((Date.now()-operationStarted)/1000)+' 秒':'')+'。正在等待儀器；OFF 可取消。';
+}
+function nudgeVoltage(direction){
+ if($('setv').disabled||stopped)return;
+ const p=params(),step=+$('vstep').value;
+ if(![.001,.01,.1].includes(step)||!Number.isFinite(p.voltage))return;
+ const lo=p.role==='battery'?p.min_voltage:0,hi=p.role==='battery'?p.max_voltage:30;
+ $('setv').value=Math.max(lo,Math.min(hi,p.voltage+direction*step)).toFixed(3);
+ edited=true;$('presetnote').textContent='電壓已帶入表單；按一鍵套用才會送至儀器。';adjust();
 }
 async function request(path,body){
- const response=await fetch(path,{method:body?'POST':'GET',headers:{'X-Control-Token':token,...(body?{'Content-Type':'application/json'}:{})},body:body?JSON.stringify(body):undefined,cache:'no-store'});
- if(response.status===204)return null;
- const raw=await response.text();let value;
- try{value=JSON.parse(raw)}catch{throw Error(raw||'本機通訊回覆無效')}
- if(!response.ok)throw Error(value.error||raw);
- return value;
+ const abort=typeof AbortController==='undefined'?null:new AbortController();
+ const timer=abort?setTimeout(()=>abort.abort(),path==='/api/action'?130000:4000):null;
+ try{
+  const response=await fetch(path,{method:body?'POST':'GET',headers:{'X-Control-Token':token,...(body?{'Content-Type':'application/json'}:{})},body:body?JSON.stringify(body):undefined,cache:'no-store',...(abort?{signal:abort.signal}:{})});
+  if(response.status===204)return null;
+  const raw=await response.text();let value;
+  try{value=JSON.parse(raw)}catch{throw Error(raw||'本機通訊回覆無效')}
+  if(!response.ok)throw Error(value.error||raw);
+  return value;
+ }catch(error){
+  if(error.name==='AbortError')throw Error('本機服務回覆逾時；操作可能仍在進行，可按 OFF 確認停止。');
+  throw error;
+ }finally{if(timer!==null)clearTimeout(timer)}
 }
 function unavailable(message){
  state=null;for(const id of ['voltage','current','power'])$(id).textContent='—';
@@ -107,20 +135,33 @@ function unavailable(message){
 }
 async function refresh(){
  if(polling||stopped)return;polling=true;
- try{state=await request('/api/state');if(!hydrated){hydrated=true;if(!edited)hydrate(state.preferences)}render()}
+ try{state=await request('/api/state');if(!hydrated){hydrated=true;if(!edited)hydrate(state.preferences)}render();maybeAutoConnect()}
  catch(error){unavailable('本機服務失聯或工作階段無效；無法確認實機輸出狀態。'+error.message)}
  finally{polling=false}
 }
+function maybeAutoConnect(){
+ if(autoConnectAttempted||!hydrated||!token||stopped)return;
+ autoConnectAttempted=true;
+ if(!state?.connected&&!state?.busy&&!working)void action('connect');
+}
 async function action(name){
  if(stopped)return;
- if(working&&!['off','disconnect','quit'].includes(name))return;
- $('localerror').textContent='';working=true;controls();
+ const emergency=['off','disconnect','quit'].includes(name);
+ if((working&&!emergency)||(emergency&&stopping))return;
+ const sent={action:name,ip:$('ip').value.trim(),config:params(),options:options()};
+ $('localerror').textContent='';pendingActions++;working=true;
+ if(emergency)stopping=true;
+ activeLabel=name==='prepare'?'自動連線並套用設定':name==='connect'?'自動連接儀器':emergency?'取消操作並確認 OFF':'處理 '+name;
+ operationStarted=Date.now();controls();
  try{
-  const result=await request('/api/action',{action:name,ip:$('ip').value.trim(),config:params(),options:options()});
-  $('message').textContent=result.message;
+  const result=await request('/api/action',sent);$('message').textContent=result.message;
   if(name==='quit'){stopped=true;unavailable('本機程式已結束；未確認 OFF 時請檢查儀器面板。');return}
- }catch(error){$('localerror').textContent=error.message}
- finally{working=false;if(!stopped)await refresh();controls()}
+ }catch(error){$('localerror').textContent=(name==='connect'?'連線未成功，可按一鍵套用重試。':'')+error.message}
+ finally{
+  pendingActions--;working=pendingActions>0;if(emergency)stopping=false;
+  if(!working){operationStarted=0;activeLabel=''}
+  controls();if(!stopped)void refresh();
+ }
 }
 function render(){
  const r=state.reading;
@@ -130,7 +171,7 @@ function render(){
  $('baseline').textContent=state.warning||'';$('baseline').classList.toggle('hidden',!state.warning);
  $('identity').textContent=(state.identity||'TCP 5025 · 不需要 VISA 或 Python')+(state.debug_only?' · 唯讀診斷連線':'');
  for(const key of ['voltage','current','power'])$(key).textContent=r?r[key].toFixed(4):'—';
- $('actual').textContent=r?r.actual:state.unknown?'未知':'—';
+ $('actual').textContent=r?r.emulation+' / '+r.actual:state.unknown?'未知':'—';
  $('output').textContent=r?'儀器回報 '+(r.output?'ON':'OFF'):(state.unknown?'OFF 未確認':state.debug_only?'唯讀診斷模式':'未連線');
  $('logs').textContent=(state.logs||[]).join('\n')||'尚無通訊紀錄。';$('logs').scrollTop=$('logs').scrollHeight;
  records=state.history||[];
@@ -158,7 +199,7 @@ function download(data,name,type){const url=URL.createObjectURL(new Blob([data],
 function recentLogText(){
  const logs=state?.logs?.length?state.logs:($('logs').textContent||'').split('\n');
  if(!logs.length||logs[0]==='尚未連線。'||logs[0]==='尚無通訊紀錄。')return '';
- return ['E36731A '+(state?.version||'v0.4.0')+' · 畫面紀錄最近 80 行',...logs.slice(-80)].join('\n');
+ return ['E36731A '+(state?.version||'v0.5.0')+' · 畫面紀錄最近 80 行',...logs.slice(-80)].join('\n');
 }
 async function copyRecent(){
  const text=recentLogText();
@@ -176,13 +217,14 @@ async function copyRecent(){
  }
 }
 $('copyRecent').onclick=copyRecent;
-$('config').onsubmit=event=>{event.preventDefault();action('apply')};
+$('config').onsubmit=event=>{event.preventDefault();action('prepare')};
+$('vup').onclick=()=>nudgeVoltage(1);$('vdown').onclick=()=>nudgeVoltage(-1);
 for(const name of ['connect','connect_debug','disconnect','on','off','quit','save','diagnose'])$(name).onclick=()=>action(name);
 for(const [kind,values] of Object.entries(presetGroups))for(const v of values)$(`preset-${kind}-${v}`).onclick=()=>choosePreset(kind,v);
 for(const id of [...fields,'ip','timeout','pollms'])$(id).addEventListener('input',()=>{edited=true;adjust()});
 
 $('debugExport').onclick=async()=>{
- try{const snapshot=await request('/api/debug');download(JSON.stringify({exported_at:new Date().toISOString(),...snapshot},null,2),'E36731A-debug-v0.4.0.json','application/json')}
+ try{const snapshot=await request('/api/debug');download(JSON.stringify({exported_at:new Date().toISOString(),...snapshot},null,2),'E36731A-debug-v0.5.0.json','application/json')}
  catch(error){$('localerror').textContent='無法取得新的除錯快照：'+error.message}
 };
 $('export').onclick=()=>{
@@ -194,5 +236,5 @@ $('export').onclick=()=>{
 };
 window.addEventListener('resize',()=>draw(state?.reading?records:[]));adjust();
 if(!token){unavailable('請使用 EXE 視窗顯示的完整網址開啟此介面，直接雙擊 HTML 無法連接儀器。')}
-else{refresh();setInterval(refresh,1200);setInterval(()=>{if(!stopped)request('/api/heartbeat').catch(()=>{})},2000)}
+else{refresh();setInterval(refresh,1200);setInterval(()=>{if(working)controls()},500);setInterval(()=>{if(!stopped)request('/api/heartbeat').catch(()=>{})},2000)}
 </script></body></html>

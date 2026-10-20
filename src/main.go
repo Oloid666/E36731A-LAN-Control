@@ -52,12 +52,16 @@ func jsonReply(w http.ResponseWriter, status int, data any) {
 	json.NewEncoder(w).Encode(data)
 }
 func (s *Server) state(w http.ResponseWriter) {
-	s.controller.mu.Lock()
-	defer s.controller.mu.Unlock()
+	c := s.controller
+	if c.mu.TryLock() {
+		c.publish()
+		c.mu.Unlock()
+	}
+	snapshot := c.snapshot.Load()
 	jsonReply(w, 200, struct {
 		State
 		Busy bool `json:"busy"`
-	}{s.controller.state, s.controller.busy.Load()})
+	}{*snapshot, c.busy.Load() || c.emergencies.Load() > 0})
 }
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
@@ -114,25 +118,25 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Only one JSON object allowed", 400)
 		return
 	}
-	allowed := map[string]bool{"connect": true, "connect_debug": true, "apply": true, "on": true, "off": true, "disconnect": true, "quit": true, "diagnose": true, "save": true}
+	allowed := map[string]bool{"connect": true, "connect_debug": true, "prepare": true, "apply": true, "on": true, "off": true, "disconnect": true, "quit": true, "diagnose": true, "save": true}
 	if !allowed[a.Action] {
 		http.Error(w, "Unknown action", 400)
 		return
 	}
 	// Validate user input before touching an already connected instrument.
-	if a.Action == "connect" || a.Action == "connect_debug" {
+	if a.Action == "connect" || a.Action == "connect_debug" || a.Action == "prepare" {
 		if e := validIP(a.IP); e != nil {
 			jsonReply(w, 400, map[string]string{"error": e.Error()})
 			return
 		}
 	}
-	if a.Action == "apply" || a.Action == "on" || a.Action == "save" {
+	if a.Action == "prepare" || a.Action == "apply" || a.Action == "on" || a.Action == "save" {
 		if e := a.Config.validate(); e != nil {
 			jsonReply(w, 400, map[string]string{"error": e.Error()})
 			return
 		}
 	}
-	if a.Action == "connect" || a.Action == "connect_debug" || a.Action == "save" {
+	if a.Action == "connect" || a.Action == "connect_debug" || a.Action == "prepare" || a.Action == "save" {
 		var e error
 		a.Options, e = a.Options.normalized()
 		if e != nil {
@@ -150,6 +154,8 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	emergency := a.Action == "off" || a.Action == "quit" || a.Action == "disconnect"
 	if emergency {
+		c.emergencies.Add(1)
+		defer c.emergencies.Add(-1)
 		c.generation.Add(1)
 	} else {
 		if !c.busy.CompareAndSwap(false, true) {
@@ -164,10 +170,13 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		c.ticket = ticket
 	}
 	var e error
+	c.progress("處理 " + a.Action)
 	if s.closing.Load() && !emergency {
 		e = errors.New("程式正在結束，操作已取消")
 	} else {
 		switch a.Action {
+		case "prepare":
+			e = c.prepare(a.IP, a.Config, a.Options)
 		case "connect", "connect_debug":
 			c.state.DebugOnly = a.Action == "connect_debug"
 			c.state.Options = a.Options
@@ -199,14 +208,31 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		case "on":
 			e = c.on(a.Config)
 		case "off":
-			e = c.off()
+			e = c.stopOutput()
 		case "disconnect", "quit":
 			e = c.disconnect()
 		}
 	}
+	cancelled := errors.Is(e, errCancelled)
+	if cancelled && !c.dirty {
+		c.state.Config = nil
+		c.begin()
+		if c.conn == nil && !c.state.Unknown {
+			e = nil
+			c.state.Message = "已取消操作；尚未連線，未變更儀器輸出"
+		} else {
+			e = c.stopOutput()
+			if e == nil {
+				c.state.Message = "已取消操作並確認 OFF；連線保留，可重新套用"
+			}
+		}
+		c.log("CANCEL " + c.state.Message)
+	}
 	if e != nil && a.Action != "save" {
 		c.fail(e)
 	}
+	c.state.Operation = ""
+	c.publish()
 	message := c.state.Message
 	if e != nil && a.Action == "save" {
 		message = e.Error()
@@ -222,7 +248,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		jsonReply(w, 502, map[string]string{"error": message})
 		return
 	}
-	jsonReply(w, 200, map[string]string{"message": message})
+	jsonReply(w, 200, map[string]any{"message": message, "cancelled": cancelled})
 }
 func openBrowser(url string) {
 	var cmd *exec.Cmd
@@ -255,7 +281,7 @@ func main() {
 	app := &Server{controller: controller, token: hex.EncodeToString(random), host: listener.Addr().String(), quit: make(chan struct{}, 1)}
 	server := &http.Server{Handler: app, ReadHeaderTimeout: 5 * time.Second, IdleTimeout: 30 * time.Second, MaxHeaderBytes: 8192}
 	url := "http://" + app.host + "/#" + app.token
-	fmt.Println("E36731A LAN Control v0.4.0 — Windows 免安裝版 / Local HTML")
+	fmt.Println("E36731A LAN Control v0.5.0 — Windows 免安裝版 / Local HTML")
 	fmt.Println("請保留這個視窗。若瀏覽器未自動開啟，複製下面完整網址：")
 	fmt.Println(url)
 	fmt.Println("退出請用網頁的『OFF 並結束程式』；強制關閉程序不能保證儀器 OFF。")

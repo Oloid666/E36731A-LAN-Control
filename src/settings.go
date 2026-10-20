@@ -14,7 +14,7 @@ type Preferences struct {
 }
 
 func DefaultPreferences() Preferences {
-	return Preferences{IP: "169.254.30.1", Config: Config{Role: "source", Mode: "CV", Voltage: 3.7, Current: .1, OVP: 4.3, Resistance: 100, ESRMilliohm: 0, MinVoltage: 3.5, MaxVoltage: 4.2}, Options: DefaultOptions()}
+	return Preferences{IP: "169.254.30.1", Config: Config{Role: "battery", Mode: "CV", Voltage: 3.7, Current: .1, OVP: 4.3, Resistance: 100, ESRMilliohm: 0, MinVoltage: 3.5, MaxVoltage: 4.2}, Options: DefaultOptions()}
 }
 func (p Preferences) validate() error {
 	if e := validIP(p.IP); e != nil {
@@ -54,6 +54,19 @@ func (c *Controller) loadPreferences() {
 		}
 		p.Config.ESRMilliohm = 0
 		c.log("SETTINGS migrated: software ESR removed; native ESR not configured; no instrument commands sent")
+	}
+	if p.Config.Role != "battery" {
+		p.Config.Role, p.Config.Mode = "battery", "CV"
+		if p.Config.MinVoltage > p.Config.Voltage {
+			p.Config.MinVoltage = 0
+		}
+		if p.Config.MaxVoltage < p.Config.Voltage {
+			p.Config.MaxVoltage = p.Config.Voltage
+		}
+		if p.Config.OVP <= p.Config.MaxVoltage {
+			p.Config.OVP = p.Config.MaxVoltage + .1
+		}
+		c.log("SETTINGS defaulted to battery PS2Q CV; values retained when valid; no commands sent")
 	}
 	if p.validate() != nil {
 		c.log("SETTINGS invalid; defaults used")

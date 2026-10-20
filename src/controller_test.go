@@ -28,6 +28,10 @@ type fakeInstrument struct {
 	rejectPS2Q      bool
 	resetSession    bool
 	measuredCurrent *float64
+	gateCommand     string
+	gateEntered     chan struct{}
+	gateRelease     <-chan struct{}
+	gateOnce        sync.Once
 }
 
 func fake() *fakeInstrument {
@@ -43,6 +47,13 @@ func (f *fakeInstrument) serve(conn net.Conn) {
 		cmd := scanner.Text()
 		f.mu.Lock()
 		f.commands = append(f.commands, cmd)
+		if cmd == f.gateCommand && f.gateRelease != nil {
+			release := f.gateRelease
+			f.gateOnce.Do(func() { close(f.gateEntered) })
+			f.mu.Unlock()
+			<-release
+			f.mu.Lock()
+		}
 		if transitioned && f.resetSession {
 			f.mu.Unlock()
 			continue
@@ -241,7 +252,7 @@ func TestSourceCVApplyThenOnOff(t *testing.T) {
 	if e := c.off(); e != nil {
 		t.Fatal(e)
 	}
-	if c.state.Config != nil || c.state.Reading.Output {
+	if c.state.Config == nil || c.state.Reading.Output {
 		t.Fatal("off state invalid")
 	}
 }
