@@ -82,7 +82,7 @@ type Controller struct {
 func NewController() *Controller {
 	c := &Controller{dial: net.DialTimeout}
 	c.state.Message = "未連線；實機驗證尚未完成"
-	c.state.Version = "v0.3.0"
+	c.state.Version = "v0.3.1"
 	c.state.Options = DefaultOptions()
 	c.state.Preferences = DefaultPreferences()
 	c.heartbeat.Store(time.Now().UnixNano())
@@ -363,13 +363,7 @@ func (c *Controller) apply(p Config) error {
 		return e
 	}
 	if mode != target {
-		if e = c.write("EMUL " + target); e != nil {
-			return e
-		}
-		if e = c.opc(); e != nil {
-			return e
-		}
-		if e = c.errors(); e != nil {
+		if e = c.switchMode(target); e != nil {
 			return e
 		}
 	}

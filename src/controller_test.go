@@ -14,6 +14,7 @@ import (
 
 type fakeInstrument struct {
 	done            chan struct{}
+	doneOnce        sync.Once
 	mu              sync.Mutex
 	commands        []string
 	values          map[string]string
@@ -25,6 +26,7 @@ type fakeInstrument struct {
 	input           float64
 	errorOn         map[string]string
 	rejectPS2Q      bool
+	resetSession    bool
 	measuredCurrent *float64
 }
 
@@ -33,13 +35,18 @@ func fake() *fakeInstrument {
 		values: map[string]string{"OUTP": "0", "VOLT": "0", "CURR": "0.1", "VOLT:PROT": "4.3", "VOLT:PROT:STAT": "1", "VOLT:PROT:TRIP": "0", "VOLT:MODE": "FIX", "CURR:MODE": "FIX", "OUTP:PMOD": "VOLT", "OUTP:DEL:RISE": "0", "OUTP:DEL:FALL": "0", "FUNC": "CURR", "CURR:LIM": "1", "RES": "4000", "RES:MODE": "FIX"}}
 }
 func (f *fakeInstrument) serve(conn net.Conn) {
-	defer close(f.done)
+	defer f.doneOnce.Do(func() { close(f.done) })
 	defer conn.Close()
 	scanner := bufio.NewScanner(conn)
+	transitioned := false
 	for scanner.Scan() {
 		cmd := scanner.Text()
 		f.mu.Lock()
 		f.commands = append(f.commands, cmd)
+		if transitioned && f.resetSession {
+			f.mu.Unlock()
+			continue
+		}
 		answer := ""
 		query := strings.Contains(cmd, "?")
 		if cmd == f.timeout {
@@ -102,6 +109,7 @@ func (f *fakeInstrument) serve(conn net.Conn) {
 			if len(parts) == 2 {
 				key, value := parts[0], parts[1]
 				if key == "EMUL" {
+					transitioned = true
 					if value == "PS2Q" && f.rejectPS2Q {
 						f.errors = append(f.errors, "+305,\"Requested operation is unsupported in current mode\"")
 					} else {

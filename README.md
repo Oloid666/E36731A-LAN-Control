@@ -1,10 +1,10 @@
-# E36731A LAN Control v0.3.0
+# E36731A LAN Control v0.3.1
 
 Windows 10/11 x64 本機 HTML 儀器控制程式。透過 LAN / TCP 5025 傳送 SCPI；使用者不需安裝 Python、Go、PyVISA 或 Keysight VISA。預設 IP 為 **169.254.30.1**。
 
-[下載 Windows 免安裝包 v0.3.0](https://github.com/Oloid666/E36731A-LAN-Control/raw/refs/heads/main/downloads/E36731A-LAN-Windows-x64-v0.3.0.zip)
+[下載 Windows 免安裝包 v0.3.1](https://github.com/Oloid666/E36731A-LAN-Control/raw/refs/heads/main/downloads/E36731A-LAN-Windows-x64-v0.3.1.zip)
 
-**狀態：42 項控制／通訊／保存設定測試、Go race 檢查、go vet 與 JavaScript 邏輯檢查通過，Windows x64 EXE 已交叉編譯。v0.3.0 尚未在實機或 Windows 上驗證，也未完成真實瀏覽器視覺驗證。** 替身測試不代表儀器接受指令、保護時序或動態性能已驗證。
+**狀態：46 項控制／通訊／保存設定測試、Go race 檢查、go vet 與 JavaScript 邏輯檢查通過，Windows x64 EXE 已交叉編譯。v0.3.1 尚未在實機或 Windows 上驗證，也未完成真實瀏覽器視覺驗證。** 替身測試不代表儀器接受指令、保護時序或動態性能已驗證。
 
 ## 一般使用
 
@@ -15,6 +15,12 @@ Windows 10/11 x64 本機 HTML 儀器控制程式。透過 LAN / TCP 5025 傳送 
 5. 核對接線、額定值與實機面板後才按 ON。結束請用「OFF 並結束程式」。
 
 本程式只監聽 `127.0.0.1`，不是 GitHub Pages 或雲端直接控制公司內網。EXE 未簽章，公司可能要求 IT 審核。
+
+## v0.3.1 模式切換修正
+
+針對實機紀錄：`EMUL PS2Q` 後立即 `*OPC?` 無回覆。本版不在模式切換中的連線上排入 `*OPC?`；送出一次 EMUL 後，等待、重連並依序讀回身分、模式、OFF 與新錯誤。最多等待 20 秒（受整體操作逾時限制），失敗不繼續設定，也不會 ON。其他設定完成後仍保留 `*OPC?` 驗證。
+
+重連只接受原本同一儀器；若讀回 +305、不符模式或非 OFF，停止並記錄。此修正尚待實機測試，不能由原紀錄斷定韌體不支援 PS2Q。若仍失敗，請匯出除錯 JSON，並提供儀器面板當時顯示的模式；不要反覆 ON。
 
 ## v0.3.0 新增與修正
 

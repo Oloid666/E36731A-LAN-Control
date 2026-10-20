@@ -1,4 +1,4 @@
-E36731A LAN Control v0.3.0 — Windows 10/11 x64 免安裝版
+﻿E36731A LAN Control v0.3.1 — Windows 10/11 x64 免安裝版
 
 1. 面板確認 OFF，關閉所有舊版 EXE，再解壓縮新版。
 2. 雙擊 E36731A-LAN-Control.exe，瀏覽器會開啟；保留程式視窗。
@@ -10,7 +10,9 @@ E36731A LAN Control v0.3.0 — Windows 10/11 x64 免安裝版
 
 請閱讀同包 README.md 與 TOMORROW.md。不要用尚未驗證的 ESR 模型直接接電池或未知充電器。
 程式只使用 LAN，不需安裝 Python、Go 或 VISA；公司須允許 EXE 與 TCP 5025。
-新版已通過 42 項控制／通訊測試、race 檢查與 UI 邏輯檢查，但未完成 Windows／實機／瀏覽器視覺驗證。
+新版已通過 46 項控制／通訊測試、race 檢查與 UI 邏輯檢查，但未完成 Windows／實機／瀏覽器視覺驗證。
 
 設定與磁碟紀錄位於 %APPDATA%\E36731A-LAN-Control\。
 關閉網頁超過 10 秒會嘗試 OFF；強制結束 EXE、斷網或關機時不能保證 OFF。OFF 不是物理隔離。
+
+本版修正 EMUL 模式切換後立即 *OPC? 逾時：改成等待重連，確認同一儀器、目標模式與 OFF，才繼續設定。尚待實機確認。
