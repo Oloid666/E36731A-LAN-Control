@@ -255,7 +255,7 @@ func main() {
 	app := &Server{controller: controller, token: hex.EncodeToString(random), host: listener.Addr().String(), quit: make(chan struct{}, 1)}
 	server := &http.Server{Handler: app, ReadHeaderTimeout: 5 * time.Second, IdleTimeout: 30 * time.Second, MaxHeaderBytes: 8192}
 	url := "http://" + app.host + "/#" + app.token
-	fmt.Println("E36731A LAN Control v0.3.1 — Windows 免安裝版 / Local HTML")
+	fmt.Println("E36731A LAN Control v0.3.2 — Windows 免安裝版 / Local HTML")
 	fmt.Println("請保留這個視窗。若瀏覽器未自動開啟，複製下面完整網址：")
 	fmt.Println(url)
 	fmt.Println("退出請用網頁的『OFF 並結束程式』；強制關閉程序不能保證儀器 OFF。")

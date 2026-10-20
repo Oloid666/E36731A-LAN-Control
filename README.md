@@ -1,10 +1,10 @@
-# E36731A LAN Control v0.3.1
+# E36731A LAN Control v0.3.2
 
 Windows 10/11 x64 本機 HTML 儀器控制程式。透過 LAN / TCP 5025 傳送 SCPI；使用者不需安裝 Python、Go、PyVISA 或 Keysight VISA。預設 IP 為 **169.254.30.1**。
 
-[下載 Windows 免安裝包 v0.3.1](https://github.com/Oloid666/E36731A-LAN-Control/raw/refs/heads/main/downloads/E36731A-LAN-Windows-x64-v0.3.1.zip)
+[下載 Windows 免安裝包 v0.3.2](https://github.com/Oloid666/E36731A-LAN-Control/raw/refs/heads/main/downloads/E36731A-LAN-Windows-x64-v0.3.2.zip)
 
-**狀態：46 項控制／通訊／保存設定測試、Go race 檢查、go vet 與 JavaScript 邏輯檢查通過，Windows x64 EXE 已交叉編譯。v0.3.1 尚未在實機或 Windows 上驗證，也未完成真實瀏覽器視覺驗證。** 替身測試不代表儀器接受指令、保護時序或動態性能已驗證。
+**狀態：46 項控制／通訊／保存設定測試、Go race 檢查、go vet 與 JavaScript 邏輯檢查通過，Windows x64 EXE 已交叉編譯。v0.3.2 尚未在實機或 Windows 上驗證，也未完成真實瀏覽器視覺驗證。** 替身測試不代表儀器接受指令、保護時序或動態性能已驗證。
 
 ## 一般使用
 
@@ -15,6 +15,15 @@ Windows 10/11 x64 本機 HTML 儀器控制程式。透過 LAN / TCP 5025 傳送 
 5. 核對接線、額定值與實機面板後才按 ON。結束請用「OFF 並結束程式」。
 
 本程式只監聽 `127.0.0.1`，不是 GitHub Pages 或雲端直接控制公司內網。EXE 未簽章，公司可能要求 IT 審核。
+
+## v0.3.2 快速設定
+
+- 1S／2S／3S／4S 按鈕顯示設定電壓 3.7／7.4／11.1／14.8 V，並顯示滿電 4.2／8.4／12.6／16.8 V。
+- 電池鍵同時帶入每節下限 3.5 V、上限 4.2 V、OVP 4.3 V；為一般鋰離子電池預設，不適用所有化學體系或 DUT。
+- Io 快速鍵 1／2／4／8 A；ESR 快速鍵 0／10／100 mΩ。ESR 仍是軟體模型，0 mΩ 只代表模型無壓降，並非實體零阻抗或硬體 ESR 設定。
+- 快速鍵只修改表單；不送出 SCPI、不自動 ON。修改後需重新套用與驗證。運作中、診斷連線或忙碌時不可使用快速鍵。
+- 電池鍵適用 Source／Battery，Sink 不帶入電池參數；Io 在 CR 不作用；ESR 只在 Battery 顯示。
+- 本版未新增原生 ESR、OCP 或電壓升降斜率；這些仍依修改方針待整合／驗證。
 
 ## v0.3.1 模式切換修正
 

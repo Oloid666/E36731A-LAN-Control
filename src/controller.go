@@ -82,7 +82,7 @@ type Controller struct {
 func NewController() *Controller {
 	c := &Controller{dial: net.DialTimeout}
 	c.state.Message = "未連線；實機驗證尚未完成"
-	c.state.Version = "v0.3.1"
+	c.state.Version = "v0.3.2"
 	c.state.Options = DefaultOptions()
 	c.state.Preferences = DefaultPreferences()
 	c.heartbeat.Store(time.Now().UnixNano())
